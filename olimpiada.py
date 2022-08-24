@@ -43,7 +43,7 @@ class Post:
         return text
 
 
-async def get_post(post_id: int) -> Post | None:
+async def get_post(post_id: int):
     """Получаем данные с какой-то новости на сайте olimpiada.ru"""
 
     page = requests.get(f"https://olimpiada.ru/news/{post_id}/")
