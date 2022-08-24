@@ -8,8 +8,8 @@ import olimpiada
 import config
 import asyncio
 
-
 import logging
+
 logging.basicConfig(filename="exceptions.log", filemode="w")
 
 bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN)
@@ -24,7 +24,7 @@ news_cb = CallbackData("news", "post_id", "type")
 
 
 async def ping_admin():
-    await bot.send_message(config.admin_id, "Алё, есть проблемы. Чекни логи и всё будет нормально) /log")
+    await bot.send_message(config.admin_id, "Советую посмотреть логи) У кого-то что-то сломалось")
 
 
 @dp.message_handler(commands="start")
@@ -32,13 +32,11 @@ async def cmd_start(msg: types.Message):
     user_id = msg.from_user.id
     if await database.user_exists(user_id):
         await msg.answer("Доброго времени суток!")
-        await msg.answer("Если у вас что-то не получается, то попробуйте команду /help")
     else:
-        await database.execute("INSERT INTO users (user_id) values ($1)", user_id)
+        await database.execute(f"INSERT INTO users (user_id) values (%s)", user_id)
         await msg.answer("Привет!")
-        await msg.answer("Данный бот поможет вам следить за олимпиадами.")
-        await msg.answer("Так как вы здесь впервые, то нужно воспользоваться командами /filter и /?")
-        ############################################## Создать канал ####################################################?
+        await msg.answer("Данный неофициальный бот поможет вам следить за олимпиадами.")
+        await msg.answer("Так как вы здесь впервые, то нужно воспользоваться командой /filter.")
 
 
 async def get_tags(user_id):
@@ -70,22 +68,21 @@ async def get_tags(user_id):
 
 
 async def send_filter_msg(user_id):
-    if await database.fetchrow("SELECT message_id FROM filter_messages WHERE user_id = $1", user_id) is not None:
-        record = await database.fetchrow("SELECT message_id FROM filter_messages WHERE user_id = $1", user_id)
-        message_id = record["message_id"]
-        await database.execute("DELETE FROM filter_messages WHERE user_id = $1", user_id)
+    if await database.fetchrow(f"SELECT message_id FROM filter_messages WHERE user_id = %s", (user_id,)) is not None:
+        message_id = await database.fetchrow(f"SELECT message_id FROM filter_messages WHERE user_id = %s", (user_id,))
+        await database.execute(f"DELETE FROM filter_messages WHERE user_id = %s", (user_id,))
         await bot.delete_message(user_id, message_id)
     text, keyboard = await get_tags(user_id)
     sent_msg = await bot.send_message(user_id, text, reply_markup=keyboard)
-    await database.execute("INSERT INTO filter_messages (user_id, message_id) values ($1, $2)", user_id,
-                           sent_msg.message_id)
+    await database.execute("INSERT INTO filter_messages (user_id, message_id) values (%s, %s)",
+                           (user_id, sent_msg.message_id))
 
 
 @dp.message_handler(commands="filter")
 async def cmd_filter(msg: types.Message):
     user_id = msg.from_user.id
     if not await database.user_exists(user_id):
-        await database.execute("INSERT INTO users (user_id) values ($1)", user_id)
+        await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
     await send_filter_msg(user_id)
 
 
@@ -93,14 +90,14 @@ async def cmd_filter(msg: types.Message):
 async def query_swap_tag(query: types.CallbackQuery, callback_data: dict):
     user_id = query.from_user.id
     if not await database.user_exists(user_id):
-        await database.execute("INSERT INTO users (user_id) values ($1)", user_id)
+        await database.execute("INSERT INTO users (user_id) values ({user_id})")
 
-    tag_id = callback_data["id"]
+    tag_id = int(callback_data["id"])
 
     if callback_data["type"] == "add":
-        await database.execute("UPDATE users SET tags = tags | $1 WHERE user_id = $2", (1 << int(tag_id)), user_id)
+        await database.execute("UPDATE users SET tags = tags | %s WHERE user_id = %s", (1 << tag_id, user_id))
     else:
-        await database.execute("UPDATE users SET tags = tags - $1 WHERE user_id = $2", (1 << int(tag_id)), user_id)
+        await database.execute("UPDATE users SET tags = tags - %s WHERE user_id = %s", (1 << tag_id, user_id))
     text, keyboard = await get_tags(user_id)
     try:
         await query.message.edit_reply_markup(reply_markup=keyboard)
@@ -115,15 +112,15 @@ async def query_swap_tag(query: types.CallbackQuery, callback_data: dict):
 async def query_all_tags(query: types.CallbackQuery, callback_data: dict):
     user_id = query.from_user.id
     if not await database.user_exists(user_id):
-        await database.execute("INSERT INTO users (user_id) values ($1)", user_id)
+        await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
         await bot.send_message(user_id, "По каким-то обстоятельствам, вы были удалены из базы данных, "
                                         "поэтому ваши настройки в фильтре были сброшены")
     cnt_tags = len(config.tag_list)
 
     if callback_data["type"] == "add":
-        await database.execute("UPDATE users SET tags = $1 WHERE user_id = $2", (1 << cnt_tags) - 1, user_id)
+        await database.execute("UPDATE users SET tags = %s WHERE user_id = %s", ((1 << cnt_tags) - 1, user_id))
     else:
-        await database.execute("UPDATE users SET tags = 0 WHERE user_id = $1", user_id)
+        await database.execute("UPDATE users SET tags = 0 WHERE user_id = %s", (user_id,))
     text, keyboard = await get_tags(user_id)
     try:
         await query.message.edit_reply_markup(reply_markup=keyboard)
@@ -135,11 +132,11 @@ async def query_all_tags(query: types.CallbackQuery, callback_data: dict):
 
 
 async def insert_post(post: olimpiada.Post):
-    while (await database.fetchrow("SELECT count(*) FROM saved_posts"))["count"] > 1000:
-        min_post_id = (await database.fetchrow("SELECT min(post_id) FROM saved_posts"))["min"]
-        await database.execute("DELETE FROM saved_posts WHERE post_id = $1", min_post_id)
-    await database.execute("INSERT INTO saved_posts (post_id, head, text, olimp, tags) VALUES ($1, $2, $3, $4, $5)",
-                           post.post_id, post.head, post.text, post.olimp, post.tags)
+    while await database.fetchrow("SELECT count(*) FROM saved_posts") > 1000:
+        min_post_id = await database.fetchrow("SELECT min(post_id) FROM saved_posts")
+        await database.execute("DELETE FROM saved_posts WHERE post_id = %s", (min_post_id,))
+    await database.execute("INSERT INTO saved_posts (post_id, head, text, olimp, tags) VALUES (%s, %s, %s, %s, %s)",
+                           (post.post_id, post.head, post.text, post.olimp, post.tags))
 
 
 @dp.callback_query_handler(news_cb.filter())
@@ -148,9 +145,10 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
     downloading_keyboard = types.InlineKeyboardMarkup()
     downloading_keyboard.add(types.InlineKeyboardButton(text="Загрузка...", callback_data="None"))
     try:
-        if await database.fetchrow("SELECT post_id FROM saved_posts WHERE post_id = $1", post_id) is not None:
-            record = await database.fetchrow("SELECT * FROM saved_posts WHERE post_id = $1", post_id)
-            post = olimpiada.Post(post_id, record["head"], record["text"], record["olimp"], record["tags"])
+        if await database.fetchrow(f"SELECT post_id FROM saved_posts WHERE post_id = %s", (post_id,)) is not None:
+            record = await database.fetchrow(f"SELECT head, text, olimp, tags FROM saved_posts WHERE post_id = %s",
+                                             (post_id, ))
+            post = olimpiada.Post(post_id, record[0], record[1], record[2], record[3])
         else:
             await query.message.edit_reply_markup(downloading_keyboard)
             post = await olimpiada.get_post(post_id)
@@ -167,11 +165,12 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
             await query.message.edit_text(text=post.short_text(), reply_markup=keyboard, disable_web_page_preview=True)
     except Exception as error:
         logging.exception(error)
+        await ping_admin()
 
 
 async def news():
     while True:
-        post_id = (await database.fetchrow("SELECT max(post_id) FROM saved_posts"))["max"]
+        post_id = await database.fetchrow("SELECT max(post_id) FROM saved_posts")
         post_id += 1
 
         try:
@@ -201,13 +200,12 @@ async def news():
             if tag_list[ind] in post.tags:
                 news_tags |= (1 << ind)
 
-        for record in await database.fetch("SELECT user_id FROM users WHERE tags | $1 != 0", news_tags):
-            user_id = record["user_id"]
+        for user_id in await database.fetch("SELECT user_id FROM users WHERE tags | %s != 0", (news_tags,)):
             try:
                 await bot.send_message(user_id, text=text, reply_markup=keyboard, disable_web_page_preview=True)
             except BotBlocked:
                 try:
-                    await database.execute(f"DELETE from users WHERE user_id = $1", user_id)
+                    await database.execute("DELETE from users WHERE user_id = %s", (user_id,))
                     logging.warning(f"Deleted user with user_id = {user_id}")
                 except Exception as error:
                     logging.exception(error)
