@@ -62,7 +62,9 @@ async def cmd_start(msg: types.Message):
         await database.execute(f"INSERT INTO users (user_id) values (%s)", (user_id, ))
         await msg.answer("Привет!")
         await msg.answer("Данный неофициальный бот поможет вам следить за олимпиадами.")
-        await msg.answer("Так как вы здесь впервые, то нужно воспользоваться командой /filter.")
+        await msg.answer("Поддерживаются две команды:\n"
+                         "/filter - настройка фильтра новостей\n"
+                         "/olymp - список олимпиад для напоминаний")
 
 
 async def get_tags(user_id):
@@ -113,8 +115,8 @@ async def get_olymp_msg(user_id):
         for activity_id in activities:
             activity_name = await database.fetchrow("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s",
                                                     (activity_id,))
-            text += f"```{activity_id}```\n" \
-                    f"{activity_name} [ссылка](https://olimpiada.ru/activity/{activity_id})\n\n"
+            text += f"<code>{activity_id}</code>   " \
+                    f"<a href=\"https://olimpiada.ru/activity{activity_id}\">{activity_name}</a>\n\n"
         keyboard.insert(types.InlineKeyboardButton("❌ Удалить олимпиаду", callback_data=olymp_cb.new(type="remove")))
     else:
         text = "Пока вы не выбрали никакую олимпиаду\n\n" \
@@ -130,7 +132,7 @@ async def cmd_olymp(msg: types.Message):
     if not await database.user_exists(user_id):
         await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
     text, keyboard = await get_olymp_msg(user_id)
-    await bot.send_message(user_id, text, reply_markup=keyboard)
+    await bot.send_message(user_id, text, reply_markup=keyboard, parse_mode="html")
 
 
 @dp.callback_query_handler(olymp_cb.filter())
@@ -224,6 +226,17 @@ async def adding_olymp(msg: types.Message, state: FSMContext):
             data["message_id"] = answer.message_id
         return
     activity_id = int(msg.text)
+    if not await olimpiada.check_olympiad(activity_id):
+        text = f"*Ошибка* ‼️Данное число не является номером, либо на странице https://olimpiada.ru/activity/{activity_id} " \
+               f"нет поля *«Расписание»*\n\n" \
+               "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
+               "Номер олимпиады можно получить из ссылки на сайте:\n" \
+               "https://olimpiada.ru/activity/*номер*\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        answer = await msg.answer(text)
+        async with state.proxy() as data:
+            data["message_id"] = answer.message_id
+        return
     if await database.fetchrow("SELECT activity_id FROM cool_olympiads WHERE activity_id = %s", (activity_id,)) is None:
         text = "*Ошибка* ‼️*Данной олимпиады нет в базе данных* ‼ Возможно олимпиада, " \
                "которую вы пытаетесь  добавить не входит в перечень" \
@@ -380,11 +393,11 @@ async def news():
             logging.exception(error)
             await ping_admin()
             await asyncio.sleep(3600)
-            break
+            continue
 
         if post is None:
             await asyncio.sleep(3600)
-            break
+            continue
 
         await insert_post(post)
 

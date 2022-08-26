@@ -158,6 +158,18 @@ async def get_date(date_string: str):
         return await day_and_month(day1, month1), await day_and_month(day2, month2)
 
 
+async def check_olympiad(activity_id):
+    page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
+    if not page.ok:
+        return False
+    soup = BeautifulSoup(page.text, "lxml")
+    table = soup.find("table", class_="events_for_activity")
+    if table is None:
+        return False
+    else:
+        return True
+
+
 async def get_events(activity_id):
     page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
     if not page.ok:
