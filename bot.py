@@ -125,7 +125,7 @@ async def get_olymp_msg(user_id):
             activity_name = await database.fetchrow("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s",
                                                     (activity_id,))
             text += f"<code>{activity_id}</code>   " \
-                    f"<a href=\"https://olimpiada.ru/activity{activity_id}\">{activity_name}</a>\n\n"
+                    f"<a href=\"https://olimpiada.ru/activity/{activity_id}\">{activity_name}</a>\n\n"
         keyboard.insert(types.InlineKeyboardButton("❌ Удалить олимпиаду", callback_data=olymp_cb.new(type="remove")))
     else:
         text = "Пока вы не выбрали никакую олимпиаду\n\n" \
