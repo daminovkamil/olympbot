@@ -367,7 +367,7 @@ async def insert_post(post: olimpiada.Post):
         await database.execute("DELETE FROM saved_posts WHERE post_id = %s", (min_post_id,))
     for activity_id in post.olimp:
         if await database.fetchrow("SELECT activity_id FROM cool_olympiads WHERE activity_id = %s", (activity_id,)):
-            post.text = "⭐ " + post.text
+            post.head = "⭐ " + post.head
             break
     await database.execute("INSERT INTO saved_posts (post_id, head, text, olimp, tags) VALUES (%s, %s, %s, %s, %s)",
                            (post.post_id, post.head, post.text, post.olimp, post.tags))
