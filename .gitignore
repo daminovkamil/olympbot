@@ -3,3 +3,4 @@ venv
 exceptions.log
 .idea
 config.py
+nohup.out

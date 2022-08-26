@@ -1,19 +1,23 @@
+import requests
 from aiogram import Dispatcher, Bot, types, executor
 from aiogram.utils.callback_data import CallbackData
 from aiogram.types import ParseMode
 from aiogram.utils.exceptions import MessageToEditNotFound, MessageNotModified, BotBlocked
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 
 import database
 import olimpiada
 import config
 import asyncio
-
+import atexit
 import logging
 
 logging.basicConfig(filename="exceptions.log", filemode="w")
 
-bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN)
-dp = Dispatcher(bot)
+bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+dp = Dispatcher(bot, storage=MemoryStorage())
 
 # type может быть либо add, либо remove
 swap_tag_cb = CallbackData("swap_tag", "id", "type")
@@ -21,6 +25,28 @@ all_tags_cb = CallbackData("all_tags", "type")
 
 # type может быть либо full, либо short
 news_cb = CallbackData("news", "post_id", "type")
+
+olymp_cb = CallbackData("olymp", "type")
+
+
+class OlympForm(StatesGroup):
+    add_olymp = State()
+    remove_olymp = State()
+
+
+@dp.message_handler(state='*', commands='cancel')
+async def cancel_handler(msg: types.Message, state: FSMContext):
+    user_id = msg.from_user.id
+    async with state.proxy() as data:
+        try:
+            await bot.delete_message(user_id, data["message_id"])
+        except:
+            pass
+    try:
+        await msg.delete()
+    except:
+        pass
+    await state.finish()
 
 
 async def ping_admin():
@@ -33,7 +59,7 @@ async def cmd_start(msg: types.Message):
     if await database.user_exists(user_id):
         await msg.answer("Доброго времени суток!")
     else:
-        await database.execute(f"INSERT INTO users (user_id) values (%s)", user_id)
+        await database.execute(f"INSERT INTO users (user_id) values (%s)", (user_id, ))
         await msg.answer("Привет!")
         await msg.answer("Данный неофициальный бот поможет вам следить за олимпиадами.")
         await msg.answer("Так как вы здесь впервые, то нужно воспользоваться командой /filter.")
@@ -78,6 +104,160 @@ async def send_filter_msg(user_id):
                            (user_id, sent_msg.message_id))
 
 
+async def get_olymp_msg(user_id):
+    activities = await database.fetchrow("SELECT activities FROM users WHERE user_id = %s", (user_id,))
+    keyboard = types.InlineKeyboardMarkup()
+    keyboard.insert(types.InlineKeyboardButton("➕ Добавить олимпиаду", callback_data=olymp_cb.new(type="add")))
+    if activities:
+        text = "Вы выбрали следующие олимпиады:\n\n"
+        for activity_id in activities:
+            activity_name = await database.fetchrow("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s",
+                                                    (activity_id,))
+            text += f"```{activity_id}```\n" \
+                    f"{activity_name} [ссылка](https://olimpiada.ru/activity/{activity_id})\n\n"
+        keyboard.insert(types.InlineKeyboardButton("❌ Удалить олимпиаду", callback_data=olymp_cb.new(type="remove")))
+    else:
+        text = "Пока вы не выбрали никакую олимпиаду\n\n" \
+               "Чтобы получать уведомления о разных событиях, " \
+               "связанных с какой олимпиадой, например, " \
+               "\"начало отборочного этапа\", нажмите на кнопку ниже"
+    return text, keyboard
+
+
+@dp.message_handler(commands="olymp")
+async def cmd_olymp(msg: types.Message):
+    user_id = msg.from_user.id
+    if not await database.user_exists(user_id):
+        await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
+    text, keyboard = await get_olymp_msg(user_id)
+    await bot.send_message(user_id, text, reply_markup=keyboard)
+
+
+@dp.callback_query_handler(olymp_cb.filter())
+async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    user_id = query.from_user.id
+    if callback_data["type"] == "add":
+        await OlympForm.add_olymp.set()
+        text = "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
+               "Номер олимпиады можно получить из ссылки на сайте:\n" \
+               "https://olimpiada.ru/activity/*номер*\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        msg = await bot.send_message(user_id, text)
+        async with state.proxy() as data:
+            data["message_id"] = msg.message_id
+            data["main_message_id"] = query.message.message_id
+    else:
+        await OlympForm.remove_olymp.set()
+        text = "Пожалуйста, введите *номер* олимпиады, которую хотите удалить из списка.\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        msg = await bot.send_message(user_id, text)
+        async with state.proxy() as data:
+            data["message_id"] = msg.message_id
+            data["main_message_id"] = query.message.message_id
+
+
+@dp.message_handler(content_types="text", state=OlympForm.remove_olymp.state)
+async def adding_olymp(msg: types.Message, state: FSMContext):
+    user_id = msg.from_user.id
+    if not await database.user_exists(user_id):
+        await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
+    async with state.proxy() as data:
+        try:
+            await bot.delete_message(user_id, data["message_id"])
+        except:
+            pass
+    try:
+        await msg.delete()
+    except:
+        pass
+    if not msg.text.isdigit():
+        text = "*Ошибка* ‼️*Ввод должен состоять из цифр* ‼\n\n" \
+               "Пожалуйста, введите *номер* олимпиады, которую хотите удалить из списка.\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        answer = await msg.answer(text)
+        async with state.proxy() as data:
+            data["message_id"] = answer.message_id
+        return
+    activity_id = int(msg.text)
+    if await database.fetchrow("SELECT user_id FROM users WHERE user_id = %s AND %s = ANY(activities)",
+                               (user_id, activity_id)) is None:
+        text = "*Ошибка* ‼️*Такой олимпиады нет в вашем списке (проверьте /olymp)* ‼\n\n" \
+               "Пожалуйста, введите *номер* олимпиады, которую хотите удалить из списка.\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        answer = await msg.answer(text)
+        async with state.proxy() as data:
+            data["message_id"] = answer.message_id
+        return
+    await database.execute("UPDATE users SET activities = array_remove(activities, %s)", (activity_id,))
+    async with state.proxy() as data:
+        try:
+            text, keyboard = await get_olymp_msg(user_id)
+            await bot.edit_message_text(chat_id=user_id, message_id=data["main_message_id"], text=text,
+                                        reply_markup=keyboard)
+        except:
+            pass
+    await state.finish()
+
+
+@dp.message_handler(content_types="text", state=OlympForm.add_olymp.state)
+async def adding_olymp(msg: types.Message, state: FSMContext):
+    user_id = msg.from_user.id
+    if not await database.user_exists(user_id):
+        await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
+    async with state.proxy() as data:
+        try:
+            await bot.delete_message(user_id, data["message_id"])
+        except:
+            pass
+    try:
+        await msg.delete()
+    except:
+        pass
+    if not msg.text.isdigit():
+        text = "*Ошибка* ‼️*Ввод должен состоять из цифр* ‼\n\n" \
+               "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
+               "Номер олимпиады можно получить из ссылки на сайте:\n" \
+               "https://olimpiada.ru/activity/*номер*\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        answer = await msg.answer(text)
+        async with state.proxy() as data:
+            data["message_id"] = answer.message_id
+        return
+    activity_id = int(msg.text)
+    if await database.fetchrow("SELECT activity_id FROM cool_olympiads WHERE activity_id = %s", (activity_id,)) is None:
+        text = "*Ошибка* ‼️*Данной олимпиады нет в базе данных* ‼ Возможно олимпиада, " \
+               "которую вы пытаетесь  добавить не входит в перечень" \
+               "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
+               "Номер олимпиады можно получить из ссылки на сайте:\n" \
+               "https://olimpiada.ru/activity/*номер*\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        answer = await msg.answer(text)
+        async with state.proxy() as data:
+            data["message_id"] = answer.message_id
+        return
+    if await database.fetchrow("SELECT user_id FROM users WHERE user_id = %s AND %s = ANY(activities)",
+                               (user_id, activity_id)) is not None:
+        text = "*Ошибка* ‼️*Вы и так выбрали данную олимпиаду* ‼\n\n" \
+               "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
+               "Номер олимпиады можно получить из ссылки на сайте:\n" \
+               "https://olimpiada.ru/activity/*номер*\n\n" \
+               "Для отмены запроса, используйте /cancel"
+        answer = await msg.answer(text)
+        async with state.proxy() as data:
+            data["message_id"] = answer.message_id
+        return
+    await database.execute("UPDATE users SET activities = array_append(activities, %s) WHERE user_id = %s",
+                           (activity_id, user_id))
+    async with state.proxy() as data:
+        try:
+            text, keyboard = await get_olymp_msg(user_id)
+            await bot.edit_message_text(chat_id=user_id, message_id=data["main_message_id"], text=text,
+                                        reply_markup=keyboard)
+        except:
+            pass
+    await state.finish()
+
+
 @dp.message_handler(commands="filter")
 async def cmd_filter(msg: types.Message):
     user_id = msg.from_user.id
@@ -90,7 +270,7 @@ async def cmd_filter(msg: types.Message):
 async def query_swap_tag(query: types.CallbackQuery, callback_data: dict):
     user_id = query.from_user.id
     if not await database.user_exists(user_id):
-        await database.execute("INSERT INTO users (user_id) values ({user_id})")
+        await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
 
     tag_id = int(callback_data["id"])
 
@@ -135,6 +315,10 @@ async def insert_post(post: olimpiada.Post):
     while await database.fetchrow("SELECT count(*) FROM saved_posts") > 1000:
         min_post_id = await database.fetchrow("SELECT min(post_id) FROM saved_posts")
         await database.execute("DELETE FROM saved_posts WHERE post_id = %s", (min_post_id,))
+    for activity_id in post.olimp:
+        if await database.fetchrow("SELECT activity_id FROM cool_olympiads WHERE activity_id = %s", (activity_id,)):
+            post.text = "⭐ " + post.text
+            break
     await database.execute("INSERT INTO saved_posts (post_id, head, text, olimp, tags) VALUES (%s, %s, %s, %s, %s)",
                            (post.post_id, post.head, post.text, post.olimp, post.tags))
 
@@ -147,7 +331,7 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
     try:
         if await database.fetchrow(f"SELECT post_id FROM saved_posts WHERE post_id = %s", (post_id,)) is not None:
             record = await database.fetchrow(f"SELECT head, text, olimp, tags FROM saved_posts WHERE post_id = %s",
-                                             (post_id, ))
+                                             (post_id,))
             post = olimpiada.Post(post_id, record[0], record[1], record[2], record[3])
         else:
             await query.message.edit_reply_markup(downloading_keyboard)
@@ -157,12 +341,28 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
             keyboard = types.InlineKeyboardMarkup()
             keyboard.add(
                 types.InlineKeyboardButton("⇧Убрать текст", callback_data=news_cb.new(post_id=post_id, type="short")))
-            await query.message.edit_text(text=post.full_text(), reply_markup=keyboard, disable_web_page_preview=True)
+            await query.message.edit_text(text=post.full_text(), reply_markup=keyboard)
         else:
             keyboard = types.InlineKeyboardMarkup()
             keyboard.add(
                 types.InlineKeyboardButton("⇩Полный текст", callback_data=news_cb.new(post_id=post_id, type="full")))
-            await query.message.edit_text(text=post.short_text(), reply_markup=keyboard, disable_web_page_preview=True)
+            await query.message.edit_text(text=post.short_text(), reply_markup=keyboard)
+    except Exception as error:
+        logging.exception(error)
+        await ping_admin()
+
+
+async def try_send(*args, **kwargs):
+    try:
+        await bot.send_message(*args, **kwargs)
+    except BotBlocked:
+        try:
+            user_id = kwargs["user_id"]
+            await database.execute("DELETE from users WHERE user_id = %s", (user_id,))
+            logging.warning(f"Deleted user with user_id = {user_id}")
+        except Exception as error:
+            logging.exception(error)
+            await ping_admin()
     except Exception as error:
         logging.exception(error)
         await ping_admin()
@@ -201,22 +401,102 @@ async def news():
                 news_tags |= (1 << ind)
 
         for user_id in await database.fetch("SELECT user_id FROM users WHERE tags | %s != 0", (news_tags,)):
-            try:
-                await bot.send_message(user_id, text=text, reply_markup=keyboard, disable_web_page_preview=True)
-            except BotBlocked:
+            await try_send(user_id, text=text, reply_markup=keyboard)
+
+
+async def downloading_events():
+    while True:
+        try:
+            for activity_id in await database.fetch("SELECT activity_id FROM cool_olympiads"):
+                for event in await olimpiada.get_events(activity_id):
+                    if await database.fetchrow(
+                            "SELECT activity_id FROM olympiad_events WHERE activity_id = %s AND event_id = %s",
+                            (activity_id, event.event_id)) is None:
+                        await database.execute(
+                            "INSERT INTO olympiad_events (activity_id, event_id, event_name, first_date, second_date) "
+                            "VALUES (%s, %s, %s, %s, %s)",
+                            (event.activity_id, event.event_id, event.event_name, event.first_date, event.second_date))
+                await asyncio.sleep(1000)
+            await database.execute("DELETE FROM olympiad_events WHERE (second_date IS NOT NULL AND "
+                                   "second_date < CURRENT_DATE) OR (second_date IS NULL AND first_date < CURRENT_DATE)")
+        except Exception as error:
+            logging.exception(error)
+            await ping_admin()
+        await asyncio.sleep(1000)
+
+
+async def events():
+    while True:
+        for event_name, event_id, activity_id in await database.fetch(
+                "SELECT event_name, event_id, activity_id FROM olympiad_events WHERE "
+                "first_date - 1 = CURRENT_DATE AND stage != 1"):
+            await database.execute("UPDATE olympiad_events SET stage = 1 "
+                                   "WHERE event_id = %s AND activity_id = %s",
+                                   (event_id, activity_id))
+            for user_id in await database.fetch("SELECT user_id FROM users WHERE %s = ANY(activities)", (activity_id,)):
                 try:
-                    await database.execute("DELETE from users WHERE user_id = %s", (user_id,))
-                    logging.warning(f"Deleted user with user_id = {user_id}")
+                    activity_name = await database.fetchrow(
+                        "SELECT activity_name FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
+                    activity_link = f"https://olimpiada.ru/activity/{activity_id}"
+                    text = f"*Через день* {event_name.lower()}\n" \
+                           f"[{activity_name}]({activity_link})"
+                    await bot.send_message(user_id, text)
+                except BotBlocked:
+                    try:
+                        await database.execute("DELETE from users WHERE user_id = %s", (user_id,))
+                        logging.warning(f"Deleted user with user_id = {user_id}")
+                    except Exception as error:
+                        logging.exception(error)
+                        await ping_admin()
                 except Exception as error:
                     logging.exception(error)
                     await ping_admin()
+        for event_name, event_id, activity_id in await database.fetch(
+                "SELECT event_name, event_id, activity_id FROM olympiad_events WHERE "
+                "first_date - 3 = CURRENT_DATE AND stage != 2"):
+            await database.execute("UPDATE olympiad_events SET stage = 2 "
+                                   "WHERE event_id = %s AND activity_id = %s",
+                                   (event_id, activity_id))
+            for user_id in await database.fetch("SELECT user_id FROM users WHERE %s = ANY(activities)", (activity_id,)):
+                activity_name = await database.fetchrow(
+                    "SELECT activity_name FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
+                activity_link = f"https://olimpiada.ru/activity/{activity_id}"
+                text = f"*Через 3 дня* {event_name.lower()}\n" \
+                       f"[{activity_name}]({activity_link})"
+                await try_send(user_id, text)
+        for event_name, event_id, activity_id in await database.fetch(
+                "SELECT event_name, event_id, activity_id FROM olympiad_events WHERE "
+                "first_date - 7 = CURRENT_DATE AND stage != 3"):
+            await database.execute("UPDATE olympiad_events SET stage = 3 "
+                                   "WHERE event_id = %s AND activity_id = %s",
+                                   (event_id, activity_id))
+            for user_id in await database.fetch("SELECT user_id FROM users WHERE %s = ANY(activities)", (activity_id,)):
+                activity_name = await database.fetchrow(
+                    "SELECT activity_name FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
+                activity_link = f"https://olimpiada.ru/activity/{activity_id}"
+                text = f"*Через неделю* {event_name.lower()}\n" \
+                       f"[{activity_name}]({activity_link})"
+                await try_send(user_id, text)
+        await asyncio.sleep(3600)
 
-            except Exception as error:
-                logging.exception(error)
-                await ping_admin()
+
+def say_hello():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(bot.send_message(config.admin_id, "Запуск 🚀 Бот начал работать))"))
+
+
+def say_bye():
+    bot_token = config.bot_token
+    chat_id = config.admin_id
+    text = "Внимание ‼ Бот перестал работать(("
+    requests.get(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}")
 
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
+    say_hello()
+    atexit.register(say_bye)
     loop.create_task(news())
+    loop.create_task(events())
+    loop.create_task(downloading_events())
     executor.start_polling(dp, skip_updates=True)
