@@ -36,6 +36,10 @@ class OlympForm(StatesGroup):
 
 @dp.message_handler(state='*', commands='cancel')
 async def cancel_handler(msg: types.Message, state: FSMContext):
+    if msg.from_user.id != msg.chat.id:
+        await msg.answer("Извините, но бот пока не работает в группах.")
+        await bot.leave_chat(msg.chat.id)
+        return
     user_id = msg.from_user.id
     async with state.proxy() as data:
         try:
@@ -55,11 +59,15 @@ async def ping_admin():
 
 @dp.message_handler(commands="start")
 async def cmd_start(msg: types.Message):
+    if msg.from_user.id != msg.chat.id:
+        await msg.answer("Извините, но бот пока не работает в группах.")
+        await bot.leave_chat(msg.chat.id)
+        return
     user_id = msg.from_user.id
     if await database.user_exists(user_id):
         await msg.answer("Доброго времени суток!")
     else:
-        await database.execute(f"INSERT INTO users (user_id) values (%s)", (user_id, ))
+        await database.execute(f"INSERT INTO users (user_id) values (%s)", (user_id,))
         await msg.answer("Привет!")
         await msg.answer("Данный неофициальный бот поможет вам следить за олимпиадами.")
         await msg.answer("Поддерживаются две команды:\n"
@@ -109,7 +117,8 @@ async def send_filter_msg(user_id):
 async def get_olymp_msg(user_id):
     activities = await database.fetchrow("SELECT activities FROM users WHERE user_id = %s", (user_id,))
     keyboard = types.InlineKeyboardMarkup()
-    keyboard.insert(types.InlineKeyboardButton("➕ Добавить олимпиаду", callback_data=olymp_cb.new(type="add")))
+    if len(activities) <= 34:
+        keyboard.insert(types.InlineKeyboardButton("➕ Добавить олимпиаду", callback_data=olymp_cb.new(type="add")))
     if activities:
         text = "Вы выбрали следующие олимпиады:\n\n"
         for activity_id in activities:
@@ -128,6 +137,10 @@ async def get_olymp_msg(user_id):
 
 @dp.message_handler(commands="olymp")
 async def cmd_olymp(msg: types.Message):
+    if msg.from_user.id != msg.chat.id:
+        await msg.answer("Извините, но бот пока не работает в группах.")
+        await bot.leave_chat(msg.chat.id)
+        return
     user_id = msg.from_user.id
     if not await database.user_exists(user_id):
         await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
@@ -139,6 +152,12 @@ async def cmd_olymp(msg: types.Message):
 async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
     user_id = query.from_user.id
     if callback_data["type"] == "add":
+        if await database.fetchrow("SELECT array_length(activities, 1) FROM users WHERE user_id = %s",
+                                   (user_id,)) == 35:
+            text, keyboard = await get_olymp_msg(user_id)
+            await bot.edit_message_text(chat_id=user_id, message_id=query.message.message_id, text=text,
+                                        reply_markup=keyboard, parse_mode="html")
+            return
         await OlympForm.add_olymp.set()
         text = "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
                "Номер олимпиады можно получить из ссылки на сайте:\n" \
@@ -149,6 +168,12 @@ async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FS
             data["message_id"] = msg.message_id
             data["main_message_id"] = query.message.message_id
     else:
+        if await database.fetchrow("SELECT array_length(activities, 1) FROM users WHERE user_id = %s",
+                                   (user_id,)) is None:
+            text, keyboard = await get_olymp_msg(user_id)
+            await bot.edit_message_text(chat_id=user_id, message_id=query.message.message_id, text=text,
+                                        reply_markup=keyboard, parse_mode="html")
+            return
         await OlympForm.remove_olymp.set()
         text = "Пожалуйста, введите *номер* олимпиады, которую хотите удалить из списка.\n\n" \
                "Для отмены запроса, используйте /cancel"
@@ -160,6 +185,10 @@ async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FS
 
 @dp.message_handler(content_types="text", state=OlympForm.remove_olymp.state)
 async def adding_olymp(msg: types.Message, state: FSMContext):
+    if msg.from_user.id != msg.chat.id:
+        await msg.answer("Извините, но бот пока не работает в группах.")
+        await bot.leave_chat(msg.chat.id)
+        return
     user_id = msg.from_user.id
     if not await database.user_exists(user_id):
         await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
@@ -195,14 +224,18 @@ async def adding_olymp(msg: types.Message, state: FSMContext):
         try:
             text, keyboard = await get_olymp_msg(user_id)
             await bot.edit_message_text(chat_id=user_id, message_id=data["main_message_id"], text=text,
-                                        reply_markup=keyboard)
+                                        reply_markup=keyboard, parse_mode="html")
         except:
             pass
     await state.finish()
 
 
 @dp.message_handler(content_types="text", state=OlympForm.add_olymp.state)
-async def adding_olymp(msg: types.Message, state: FSMContext):
+async def removing_olymp(msg: types.Message, state: FSMContext):
+    if msg.from_user.id != msg.chat.id:
+        await msg.answer("Извините, но бот пока не работает в группах.")
+        await bot.leave_chat(msg.chat.id)
+        return
     user_id = msg.from_user.id
     if not await database.user_exists(user_id):
         await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
@@ -265,7 +298,7 @@ async def adding_olymp(msg: types.Message, state: FSMContext):
         try:
             text, keyboard = await get_olymp_msg(user_id)
             await bot.edit_message_text(chat_id=user_id, message_id=data["main_message_id"], text=text,
-                                        reply_markup=keyboard)
+                                        reply_markup=keyboard, parse_mode="html")
         except:
             pass
     await state.finish()
@@ -273,6 +306,10 @@ async def adding_olymp(msg: types.Message, state: FSMContext):
 
 @dp.message_handler(commands="filter")
 async def cmd_filter(msg: types.Message):
+    if msg.from_user.id != msg.chat.id:
+        await msg.answer("Извините, но бот пока не работает в группах.")
+        await bot.leave_chat(msg.chat.id)
+        return
     user_id = msg.from_user.id
     if not await database.user_exists(user_id):
         await database.execute("INSERT INTO users (user_id) values (%s)", (user_id,))
@@ -368,14 +405,6 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
 async def try_send(*args, **kwargs):
     try:
         await bot.send_message(*args, **kwargs)
-    except BotBlocked:
-        try:
-            user_id = kwargs["user_id"]
-            await database.execute("DELETE from users WHERE user_id = %s", (user_id,))
-            logging.warning(f"Deleted user with user_id = {user_id}")
-        except Exception as error:
-            logging.exception(error)
-            await ping_admin()
     except Exception as error:
         logging.exception(error)
         await ping_admin()

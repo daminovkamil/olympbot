@@ -163,7 +163,7 @@ async def check_olympiad(activity_id):
     if not page.ok:
         return False
     soup = BeautifulSoup(page.text, "lxml")
-    table = soup.find("table", class_="events_for_activity")
+    table = soup.find(text="Расписание")
     if table is None:
         return False
     else:
