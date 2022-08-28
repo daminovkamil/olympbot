@@ -273,7 +273,7 @@ async def removing_olymp(msg: types.Message, state: FSMContext):
         return
     if await database.fetchrow("SELECT activity_id FROM cool_olympiads WHERE activity_id = %s", (activity_id,)) is None:
         text = "*Ошибка* ‼️*Данной олимпиады нет в базе данных* ‼ Возможно олимпиада, " \
-               "которую вы пытаетесь  добавить не входит в перечень" \
+               "которую вы пытаетесь  добавить не входит в перечень.\n\n" \
                "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
                "Номер олимпиады можно получить из ссылки на сайте:\n" \
                "https://olimpiada.ru/activity/*номер*\n\n" \
@@ -476,13 +476,13 @@ async def downloading_events():
                             "INSERT INTO olympiad_events (activity_id, event_id, event_name, first_date, second_date) "
                             "VALUES (%s, %s, %s, %s, %s)",
                             (event.activity_id, event.event_id, event.event_name, event.first_date, event.second_date))
-                await asyncio.sleep(1000)
+                await asyncio.sleep(600)
             await database.execute("DELETE FROM olympiad_events WHERE (second_date IS NOT NULL AND "
                                    "second_date < CURRENT_DATE) OR (second_date IS NULL AND first_date < CURRENT_DATE)")
         except Exception as error:
             logging.exception(error)
             await ping_admin()
-        await asyncio.sleep(1000)
+        await asyncio.sleep(600)
 
 
 async def events():
