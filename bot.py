@@ -24,7 +24,8 @@ swap_tag_cb = CallbackData("swap_tag", "id", "type")
 all_tags_cb = CallbackData("all_tags", "type")
 
 # type может быть либо full, либо short
-news_cb = CallbackData("news", "post_id", "type")
+full_text_cb = CallbackData("full_text", "post_id")
+short_text_cb = CallbackData("short_text", "post_id")
 
 olymp_cb = CallbackData("olymp", "type")
 
@@ -373,7 +374,7 @@ async def insert_post(post: olimpiada.Post):
                            (post.post_id, post.head, post.text, post.olimp, post.tags))
 
 
-@dp.callback_query_handler(news_cb.filter())
+@dp.callback_query_handler(full_text_cb.filter())
 async def query_news(query: types.CallbackQuery, callback_data: dict):
     post_id = int(callback_data["post_id"])
     downloading_keyboard = types.InlineKeyboardMarkup()
@@ -387,16 +388,33 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
             await query.message.edit_reply_markup(downloading_keyboard)
             post = await olimpiada.get_post(post_id)
             await insert_post(post)
-        if callback_data["type"] == "full":
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(
-                types.InlineKeyboardButton("⇧Убрать текст", callback_data=news_cb.new(post_id=post_id, type="short")))
-            await query.message.edit_text(text=post.full_text(), reply_markup=keyboard)
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(
+            types.InlineKeyboardButton("⇧Убрать текст", callback_data=short_text_cb.new(post_id=post_id)))
+        await query.message.edit_text(text=post.full_text(), reply_markup=keyboard)
+    except Exception as error:
+        logging.exception(error)
+        await ping_admin()
+
+
+@dp.callback_query_handler(short_text_cb.filter())
+async def query_news(query: types.CallbackQuery, callback_data: dict):
+    post_id = int(callback_data["post_id"])
+    downloading_keyboard = types.InlineKeyboardMarkup()
+    downloading_keyboard.add(types.InlineKeyboardButton(text="Загрузка...", callback_data="None"))
+    try:
+        if await database.fetchrow(f"SELECT post_id FROM saved_posts WHERE post_id = %s", (post_id,)) is not None:
+            record = await database.fetchrow(f"SELECT head, text, olimp, tags FROM saved_posts WHERE post_id = %s",
+                                             (post_id,))
+            post = olimpiada.Post(post_id, record[0], record[1], record[2], record[3])
         else:
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(
-                types.InlineKeyboardButton("⇩Полный текст", callback_data=news_cb.new(post_id=post_id, type="full")))
-            await query.message.edit_text(text=post.short_text(), reply_markup=keyboard)
+            await query.message.edit_reply_markup(downloading_keyboard)
+            post = await olimpiada.get_post(post_id)
+            await insert_post(post)
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(
+            types.InlineKeyboardButton("⇩Полный текст", callback_data=full_text_cb.new(post_id=post_id)))
+        await query.message.edit_text(text=post.short_text(), reply_markup=keyboard)
     except Exception as error:
         logging.exception(error)
         await ping_admin()
@@ -433,7 +451,7 @@ async def news():
         text = post.short_text()
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(
-            types.InlineKeyboardButton("⇩Полный текст", callback_data=news_cb.new(post_id=post_id, type="full")))
+            types.InlineKeyboardButton("⇩Полный текст", callback_data=full_text_cb.new(post_id=post_id)))
 
         tag_list = config.tag_list
         news_tags = 0
