@@ -460,7 +460,7 @@ async def news():
             if tag_list[ind] in post.tags:
                 news_tags |= (1 << ind)
 
-        for user_id in await database.fetch("SELECT user_id FROM users WHERE tags | %s != 0", (news_tags,)):
+        for user_id in await database.fetch("SELECT user_id FROM users WHERE tags & %s != 0", (news_tags,)):
             await try_send(user_id, text=text, reply_markup=keyboard)
 
 
