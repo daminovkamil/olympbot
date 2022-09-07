@@ -13,6 +13,15 @@ import database
 session = requests.Session()
 
 
+def url_get(*args, **kwargs):
+    global session
+    try:
+        return session.get(*args, **kwargs)
+    except:
+        session = requests.Session()
+        return session.get(*args, **kwargs)
+
+
 def md(*args, **kwargs):
     return markdownify(*args, **kwargs).replace("\xa0", " ")
 
@@ -54,7 +63,7 @@ class Post:
 async def get_post(post_id: int):
     """Получаем данные с какой-то новости на сайте olimpiada.ru"""
 
-    page = session.get(f"https://olimpiada.ru/news/{post_id}/")
+    page = url_get(f"https://olimpiada.ru/news/{post_id}/")
 
     if not page.ok:
         return None
@@ -160,7 +169,7 @@ async def get_date(date_string: str):
 
 
 async def check_olympiad(activity_id):
-    page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
+    page = url_get(f"https://olimpiada.ru/activity/{activity_id}")
     if not page.ok:
         return False
     soup = BeautifulSoup(page.text, "lxml")
@@ -172,7 +181,7 @@ async def check_olympiad(activity_id):
 
 
 async def get_events(activity_id):
-    page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
+    page = url_get(f"https://olimpiada.ru/activity/{activity_id}")
     if not page.ok:
         return []
     soup = BeautifulSoup(page.text, "lxml")
