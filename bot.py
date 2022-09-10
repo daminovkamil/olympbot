@@ -2,7 +2,7 @@ import requests
 from aiogram import Dispatcher, Bot, types, executor
 from aiogram.utils.callback_data import CallbackData
 from aiogram.types import ParseMode
-from aiogram.utils.exceptions import MessageToEditNotFound, MessageNotModified, BotBlocked
+from aiogram.utils.exceptions import MessageToEditNotFound, MessageNotModified, BotBlocked, UserDeactivated
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -55,7 +55,10 @@ async def cancel_handler(msg: types.Message, state: FSMContext):
 
 
 async def ping_admin():
-    await bot.send_message(config.admin_id, "Советую посмотреть логи) У кого-то что-то сломалось")
+    bot_token = config.bot_token
+    chat_id = config.admin_id
+    text = "Советую посмотреть логи) У кого-то что-то сломалось"
+    requests.get(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}")
 
 
 @dp.message_handler(commands="start")
@@ -423,7 +426,7 @@ async def query_news(query: types.CallbackQuery, callback_data: dict):
 async def try_send(*args, **kwargs):
     try:
         await bot.send_message(*args, **kwargs)
-    except BotBlocked:
+    except BotBlocked or UserDeactivated:
         if "chat_id" in kwargs:
             user_id = kwargs["chat_id"]
         else:
@@ -547,22 +550,8 @@ async def events():
         await asyncio.sleep(3600)
 
 
-def say_hello():
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(bot.send_message(config.admin_id, "Запуск 🚀 Бот начал работать))"))
-
-
-def say_bye():
-    bot_token = config.bot_token
-    chat_id = config.admin_id
-    text = "Внимание ‼ Бот перестал работать(("
-    requests.get(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}")
-
-
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    say_hello()
-    atexit.register(say_bye)
     loop.create_task(news())
     loop.create_task(events())
     loop.create_task(downloading_events())

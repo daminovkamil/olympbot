@@ -8,8 +8,6 @@ from nltk.tokenize import sent_tokenize
 from datetime import *
 import requests
 
-import database
-
 session = requests.Session()
 
 
