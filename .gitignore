@@ -4,3 +4,4 @@ exceptions.log
 .idea
 config.py
 nohup.out
+output.txt
