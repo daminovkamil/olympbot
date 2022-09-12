@@ -13,7 +13,7 @@ run = loop.run_until_complete
 def ping_admin():
     bot_token = config.bot_token
     chat_id = config.admin_id
-    text = "Советую посмотреть логи) У кого-то что-то сломалось"
+    text = "Советую посмотреть логи) Ошибка в event.py"
     requests.get(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}")
 
 
