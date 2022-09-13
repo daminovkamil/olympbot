@@ -5,3 +5,4 @@ exceptions.log
 config.py
 nohup.out
 output.txt
+logs
