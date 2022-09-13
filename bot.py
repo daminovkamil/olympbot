@@ -14,7 +14,7 @@ import asyncio
 import atexit
 import logging
 
-logging.basicConfig(filename="output/bot.log", filemode="a")
+logging.basicConfig(filename="output/bot.log", filemode="w")
 
 bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 dp = Dispatcher(bot, storage=MemoryStorage())
