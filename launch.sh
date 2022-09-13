@@ -27,7 +27,7 @@ fi
 
 while true
 do
-  nohup python3 bot.py > ${out} 2> ${err}
+  python3 bot.py > ${out} 2> ${err}
   curl -s \
       -X POST \
       https://api.telegram.org/bot$bot_token/sendMessage \
