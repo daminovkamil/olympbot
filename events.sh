@@ -1,6 +1,6 @@
 #!/bin/sh
 
-bot_token="1902465468:AAHONMuPinzkDk-a6OyAoWZ7pmIMLLxCAng"
+bot_token="1801938752:AAFZgJR00Lxcygf0Z3tmhDR_ZQcCpnWTxMY"
 admin_id=701798856
 text="Есть какая-то проблема в файле events.py("
 
