@@ -5,7 +5,7 @@ import config
 import logging
 import asyncio
 
-logging.basicConfig(filename="logs/events.log", filemode="a")
+logging.basicConfig(filename="output/events.log", filemode="a")
 loop = asyncio.get_event_loop()
 run = loop.run_until_complete
 

@@ -1,8 +1,5 @@
 __pycache__
 venv
-exceptions.log
 .idea
+output
 config.py
-nohup.out
-output.txt
-logs
