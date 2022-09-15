@@ -3,3 +3,4 @@ venv
 .idea
 output
 config.py
+nohup.out
