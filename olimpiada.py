@@ -193,7 +193,10 @@ async def get_events(activity_id):
         event_id = int(item.find("a")["href"][len(f"/activity/{activity_id}/events/"):])
         event_name = item.find("div", class_="event_name").get_text()
         date_string = item.find_all("td")[1].find("a").get_text()
-        first_date, second_date = await get_date(date_string)
+        if date_string == "Отменено":
+            first_date, second_date = date.today(), date.today()
+        else:
+            first_date, second_date = await get_date(date_string)
         event = Event(activity_id, event_id, event_name, first_date, second_date)
         result.append(event)
     return result

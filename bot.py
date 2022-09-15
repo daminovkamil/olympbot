@@ -2,7 +2,7 @@ import requests
 from aiogram import Dispatcher, Bot, types, executor
 from aiogram.utils.callback_data import CallbackData
 from aiogram.types import ParseMode
-from aiogram.utils.exceptions import MessageToEditNotFound, MessageNotModified, BotBlocked, UserDeactivated
+from aiogram.utils.exceptions import MessageToEditNotFound, MessageCantBeDeleted, BotBlocked, UserDeactivated
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -54,10 +54,9 @@ async def cancel_handler(msg: types.Message, state: FSMContext):
     await state.finish()
 
 
-async def ping_admin():
+async def ping_admin(text="Советую посмотреть логи) У кого-то что-то сломалось"):
     bot_token = config.bot_token
     chat_id = config.admin_id
-    text = "Советую посмотреть логи) У кого-то что-то сломалось"
     requests.get(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}")
 
 
@@ -111,7 +110,12 @@ async def send_filter_msg(user_id):
     if await database.fetchrow(f"SELECT message_id FROM filter_messages WHERE user_id = %s", (user_id,)) is not None:
         message_id = await database.fetchrow(f"SELECT message_id FROM filter_messages WHERE user_id = %s", (user_id,))
         await database.execute(f"DELETE FROM filter_messages WHERE user_id = %s", (user_id,))
-        await bot.delete_message(user_id, message_id)
+        try:
+            await bot.delete_message(user_id, message_id)
+        except MessageCantBeDeleted:
+            pass
+        except Exception as error:
+            logging.exception(error)
     text, keyboard = await get_tags(user_id)
     sent_msg = await bot.send_message(user_id, text, reply_markup=keyboard)
     await database.execute("INSERT INTO filter_messages (user_id, message_id) values (%s, %s)",
@@ -431,8 +435,8 @@ async def try_send(*args, **kwargs):
             user_id = kwargs["chat_id"]
         else:
             user_id = args[0]
-        await database.execute("UPDATE users SET tags = 0 WHERE user_id = %s", (user_id, ))
-        await database.execute("UPDATE users SET activities = '{}' WHERE user_id = %s", (user_id, ))
+        await database.execute("UPDATE users SET tags = 0 WHERE user_id = %s", (user_id,))
+        await database.execute("UPDATE users SET activities = '{}' WHERE user_id = %s", (user_id,))
     except Exception as error:
         logging.exception(error)
         await ping_admin()
@@ -472,6 +476,28 @@ async def news():
 
         for user_id in await database.fetch("SELECT user_id FROM users WHERE tags & %s != 0", (news_tags,)):
             await try_send(user_id, text=text, reply_markup=keyboard)
+
+
+async def loading_events():
+    try:
+        for activity_id in await database.fetch("SELECT activity_id FROM cool_olympiads"):
+            try:
+                for event in await olimpiada.get_events(activity_id):
+                    await database.execute("DELETE FROM olympiad_events WHERE activity_id = %s AND event_id = %s",
+                                           (activity_id, event.event_id))
+                    await database.execute(
+                        "INSERT INTO olympiad_events (activity_id, event_id, event_name, first_date, second_date) "
+                        "VALUES (%s, %s, %s, %s, %s)",
+                        (event.activity_id, event.event_id, event.event_name, event.first_date, event.second_date))
+            except Exception as error:
+                logging.exception(error)
+                await ping_admin(f"Проблемы с activity_id = f{activity_id}")
+        await database.execute("DELETE FROM olympiad_events WHERE (second_date IS NOT NULL AND second_date < "
+                               "CURRENT_DATE) OR (second_date IS NULL AND first_date < CURRENT_DATE)")
+    except Exception as error:
+        logging.exception(error)
+        await ping_admin("Какая-то проблема с функцией loading events")
+    await asyncio.sleep(3600)
 
 
 async def events():
@@ -533,4 +559,5 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(news())
     loop.create_task(events())
+    loop.create_task(loading_events())
     executor.start_polling(dp, skip_updates=True)
