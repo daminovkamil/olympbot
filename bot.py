@@ -483,12 +483,17 @@ async def loading_events():
         for activity_id in await database.fetch("SELECT activity_id FROM cool_olympiads"):
             try:
                 for event in await olimpiada.get_events(activity_id):
-                    await database.execute("DELETE FROM olympiad_events WHERE activity_id = %s AND event_id = %s",
-                                           (activity_id, event.event_id))
-                    await database.execute(
-                        "INSERT INTO olympiad_events (activity_id, event_id, event_name, first_date, second_date) "
-                        "VALUES (%s, %s, %s, %s, %s)",
-                        (event.activity_id, event.event_id, event.event_name, event.first_date, event.second_date))
+                    if await database.fetchrow("SELECT * FROM olympiad_events WHERE activity_id = %s AND event_id = %s",
+                                               (event.activity_id, event.event_id)) is not None:
+                        await database.execute("UPDATE olympiad_events SET event_name = %s, first_date = %s, "
+                                               "second_date = %s WHERE event_id = %s AND activity_id = %s",
+                                               (event.event_name, event.first_date, event.second_date, event.event_id,
+                                                event.activity_id))
+                    else:
+                        await database.execute("INSERT INTO olympiad_events (activity_id, event_id, event_name, f"
+                                               "irst_date, second_date) VALUES (%s, %s, %s, %s, %s)",
+                                               (event.activity_id, event.event_id, event.event_name,
+                                                event.first_date, event.second_date))
             except Exception as error:
                 logging.exception(error)
                 await ping_admin(f"Проблемы с activity_id = f{activity_id}")
