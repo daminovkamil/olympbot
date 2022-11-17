@@ -1,7 +1,7 @@
 import requests
 from aiogram import Dispatcher, Bot, types, executor
 from aiogram.utils.callback_data import CallbackData
-from aiogram.types import ParseMode
+from aiogram.types import ParseMode, ContentTypes
 from aiogram.utils.exceptions import MessageToEditNotFound, MessageCantBeDeleted, BotBlocked, UserDeactivated
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -35,6 +35,11 @@ olymp_cb = CallbackData("olymp", "type")
 class OlympForm(StatesGroup):
     add_olymp = State()
     remove_olymp = State()
+
+
+@dp.message_handler(content_types='web_app_data')
+async def getting_web_data(msg: types.WebAppData):
+    print(msg)
 
 
 def user_exists(user_id: int):
@@ -142,6 +147,8 @@ async def get_olymp_msg(user_id):
                "Чтобы получать уведомления о разных событиях, " \
                "связанных с какой олимпиадой, например, " \
                "\"начало отборочного этапа\", нажмите на кнопку ниже"
+    keyboard.add(types.InlineKeyboardButton("Изменить через WebApp", web_app=WebAppInfo(
+        url=f"https://kdaminov.ru/aD6DrCDLerEIDVEec3cf94kSEdkMxEy8z4Dug5fHzA5xN7qL2lfGcUqKHjdu3ChJqNYDPhrUKKruj31G04apFpXdc1fD6xsxULu5mrf0pYWBgfqyNvtGw2STYkARs0wodZy70kfdyYjTG2enmWkbVCwW33jcghABF2cMWtGA3Ag74LcCbtVvO19E08yayo4lXhDINOFXHJSZUtdDBwSBxRvBHTzjjJAfVPmnBKz8gTLf6gfrAMBmw1fB7mgMp2m5BwSqumDvtO3rRzrBKOR4I8oDJCcCoq4JFts8CiNbcfIdDoXlHa5kbtn4EqI6AWsTO7sHz6LZfyfIvCA2lt0ZfrFbYw8PVzZybXoZO0CFYZkKbqZLkUGIZQyvsHsW7DG1vlNVMVqfh2IThlaHbTRNMcru2BFnW1yv2UDLuFb6pJsJoLYHr1zPTIMSRRgqPJ4pMjWBbcJLFJbQYW5Kq48bP61HT7oa7JlMKYjL2IYtDEetJezzHzAEwYmvMVtF5O1m10rpWk591O4hWaXmaK82YKQWtYQbp3BPmgSCKueYz7rXU8neX8DUUVo49LNYMEEx2qCDLiPv1BXWo8mzdmhEy00DY9Wm6DYhOEHwJ1sdcHtbOv9MkrX0q611ggB2kZJzhSNTlQfPSiD8bqjHfrYqfmQD0IviLAics2orGZQVrR4FuizJZb9gJ9wsvbNqJXQovDFweEkIcDX27AMyVFYylBxuiEvZU0TRtO3NTnQJAkfVV2fIja2v32pNd0i1ZwqpyulSlEd3QwmbeGH1LoXa9MRwujeM8aKZLMjYBK76wZPMx45NC4bC31oO2kTc1R17l6ml8pjzJmEninVCUVTyoDHl4VfQCmOKwvhAqSQj9L5ElI21nYc0P/{user_id}")))
     return text, keyboard
 
 
@@ -190,7 +197,7 @@ async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FS
 
 
 @dp.message_handler(content_types="text", state=OlympForm.remove_olymp.state)
-async def adding_olymp(msg: types.Message, state: FSMContext):
+async def removing_olymp(msg: types.Message, state: FSMContext):
     user_id = msg.from_user.id
     if not user_exists(user_id):
         db.run("INSERT INTO users (user_id) values (%s)", (user_id,))
@@ -233,7 +240,7 @@ async def adding_olymp(msg: types.Message, state: FSMContext):
 
 
 @dp.message_handler(content_types="text", state=OlympForm.add_olymp.state)
-async def removing_olymp(msg: types.Message, state: FSMContext):
+async def adding_olymp(msg: types.Message, state: FSMContext):
     user_id = msg.from_user.id
     if not user_exists(user_id):
         db.run("INSERT INTO users (user_id) values (%s)", (user_id,))
