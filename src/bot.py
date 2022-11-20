@@ -15,8 +15,6 @@ import asyncio
 import logging
 import datetime
 
-logging.basicConfig(filename="log", filemode="w")
-
 bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 dp = Dispatcher(bot, storage=MemoryStorage())
 db = postgres.Postgres(config.database_url)
@@ -147,8 +145,6 @@ async def get_olymp_msg(user_id):
                "Чтобы получать уведомления о разных событиях, " \
                "связанных с какой олимпиадой, например, " \
                "\"начало отборочного этапа\", нажмите на кнопку ниже"
-    keyboard.add(types.InlineKeyboardButton("Изменить через WebApp", web_app=WebAppInfo(
-        url=f"https://kdaminov.ru/aD6DrCDLerEIDVEec3cf94kSEdkMxEy8z4Dug5fHzA5xN7qL2lfGcUqKHjdu3ChJqNYDPhrUKKruj31G04apFpXdc1fD6xsxULu5mrf0pYWBgfqyNvtGw2STYkARs0wodZy70kfdyYjTG2enmWkbVCwW33jcghABF2cMWtGA3Ag74LcCbtVvO19E08yayo4lXhDINOFXHJSZUtdDBwSBxRvBHTzjjJAfVPmnBKz8gTLf6gfrAMBmw1fB7mgMp2m5BwSqumDvtO3rRzrBKOR4I8oDJCcCoq4JFts8CiNbcfIdDoXlHa5kbtn4EqI6AWsTO7sHz6LZfyfIvCA2lt0ZfrFbYw8PVzZybXoZO0CFYZkKbqZLkUGIZQyvsHsW7DG1vlNVMVqfh2IThlaHbTRNMcru2BFnW1yv2UDLuFb6pJsJoLYHr1zPTIMSRRgqPJ4pMjWBbcJLFJbQYW5Kq48bP61HT7oa7JlMKYjL2IYtDEetJezzHzAEwYmvMVtF5O1m10rpWk591O4hWaXmaK82YKQWtYQbp3BPmgSCKueYz7rXU8neX8DUUVo49LNYMEEx2qCDLiPv1BXWo8mzdmhEy00DY9Wm6DYhOEHwJ1sdcHtbOv9MkrX0q611ggB2kZJzhSNTlQfPSiD8bqjHfrYqfmQD0IviLAics2orGZQVrR4FuizJZb9gJ9wsvbNqJXQovDFweEkIcDX27AMyVFYylBxuiEvZU0TRtO3NTnQJAkfVV2fIja2v32pNd0i1ZwqpyulSlEd3QwmbeGH1LoXa9MRwujeM8aKZLMjYBK76wZPMx45NC4bC31oO2kTc1R17l6ml8pjzJmEninVCUVTyoDHl4VfQCmOKwvhAqSQj9L5ElI21nYc0P/{user_id}")))
     return text, keyboard
 
 
@@ -158,7 +154,16 @@ async def cmd_olymp(msg: types.Message):
     if not user_exists(user_id):
         db.run("INSERT INTO users (user_id) values (%s)", (user_id,))
     text, keyboard = await get_olymp_msg(user_id)
-    await bot.send_message(user_id, text, reply_markup=keyboard, parse_mode="html")
+    ans: types.Message = await bot.send_message(user_id, text, parse_mode="html")
+    keyboard.add(
+        types.InlineKeyboardButton(
+            text="Изменить через WebApp",
+            web_app=WebAppInfo(
+                url=f"https://kdaminov.ru/{config.secret_url}{user_id}?message_id={ans.message_id}"
+            )
+        )
+    )
+    await ans.edit_reply_markup(reply_markup=keyboard)
 
 
 @dp.callback_query_handler(olymp_cb.filter())
@@ -169,7 +174,7 @@ async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FS
                   (user_id,)) == 35:
             text, keyboard = await get_olymp_msg(user_id)
             await bot.edit_message_text(chat_id=user_id, message_id=query.message.message_id, text=text,
-                                        reply_markup=keyboard, parse_mode="html")
+                                        parse_mode="html")
             return
         await OlympForm.add_olymp.set()
         text = "Пожалуйста, введите *номер* олимпиады, которую хотите добавить.\n\n" \
@@ -185,7 +190,7 @@ async def query_olymp(query: types.CallbackQuery, callback_data: dict, state: FS
                   (user_id,)) is None:
             text, keyboard = await get_olymp_msg(user_id)
             await bot.edit_message_text(chat_id=user_id, message_id=query.message.message_id, text=text,
-                                        reply_markup=keyboard, parse_mode="html")
+                                        parse_mode="html")
             return
         await OlympForm.remove_olymp.set()
         text = "Пожалуйста, введите *номер* олимпиады, которую хотите удалить из списка.\n\n" \
@@ -233,7 +238,7 @@ async def removing_olymp(msg: types.Message, state: FSMContext):
         try:
             text, keyboard = await get_olymp_msg(user_id)
             await bot.edit_message_text(chat_id=user_id, message_id=data["main_message_id"], text=text,
-                                        reply_markup=keyboard, parse_mode="html")
+                                        parse_mode="html")
         except:
             pass
     await state.finish()
@@ -303,7 +308,7 @@ async def adding_olymp(msg: types.Message, state: FSMContext):
         try:
             text, keyboard = await get_olymp_msg(user_id)
             await bot.edit_message_text(chat_id=user_id, message_id=data["main_message_id"], text=text,
-                                        reply_markup=keyboard, parse_mode="html")
+                                        parse_mode="html")
         except:
             pass
     await state.finish()
@@ -510,6 +515,7 @@ async def events():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(filename="log", filemode="w")
     loop = asyncio.get_event_loop()
     loop.create_task(news())
     loop.create_task(events())
