@@ -1,10 +1,6 @@
 """Файл отвечает за запросы к сайту"""
-import asyncio
-import datetime
-
 from markdownify import markdownify
 from bs4 import BeautifulSoup
-from nltk.tokenize import sent_tokenize
 from datetime import *
 import requests
 
@@ -34,8 +30,6 @@ class Post:
 
     def short_text(self):
         text = f"[{self.head}](https://olimpiada.ru/news/{self.post_id})"
-        text += "\n\n"
-        text += sent_tokenize(self.text)[0]
         text += "\n\n"
         text += " ".join(["#" + tag.replace(" ", "") for tag in self.tags])
         return text
