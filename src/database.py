@@ -83,23 +83,23 @@ class User:
         run("UPDATE users SET settings = '%s' WHERE user_id = %s" % (settings, self.user_id))
 
 
-def get_users_list() -> list[User]:
-    users: list[User] = []
+def get_users_list():
+    users = []
     for user_id in all("SELECT user_id FROM users"):
         users.append(User(user_id))
     return users
 
 
-def notifications_filter(olympiad: int) -> list[int]:
-    result: list[int] = []
+def notifications_filter(olympiad):
+    result = []
     for user in get_users_list():
         if user.notifications_enabled and str(olympiad) in user.olympiads:
             result.append(user.user_id)
     return result
 
 
-def news_filter(olympiads: list[int], subjects: list[str]):
-    result: list[int] = []
+def news_filter(olympiads, subjects):
+    result = []
     olympiads = set([str(item) for item in olympiads])
     subjects = set(subjects)
     for user in get_users_list():
