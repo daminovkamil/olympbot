@@ -32,9 +32,10 @@ def all(*args):
 
 
 class User:
-    def __init__(self, user_id):
+    def __init__(self, user_id, data=None, settings=None):
         self.user_id = user_id
-        data = one("SELECT data FROM users WHERE user_id = %s", (user_id, ))
+        if data is None:
+            data, settings = one("SELECT data, settings FROM users WHERE user_id = %s", (user_id, ))
         if data is None:
             data = json.dumps({
                 "subjects": [],
@@ -58,7 +59,7 @@ class User:
             self.news_enabled = True
         else:
             data = json.loads(data)
-            settings = json.loads(one("SELECT settings FROM users WHERE user_id = %s", (user_id,)))
+            settings = json.loads(settings)
 
             self.subjects = data["subjects"]
             self.olympiads = data["olympiads"]
@@ -84,9 +85,10 @@ class User:
 
 
 def get_users_list():
+    data = all("SELECT user_id, data, settings FROM users")
     users = []
-    for user_id in all("SELECT user_id FROM users"):
-        users.append(User(user_id))
+    for user_id, data, settings in data:
+        users.append(User(user_id, data, settings))
     return users
 
 
