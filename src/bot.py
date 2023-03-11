@@ -124,11 +124,8 @@ async def query_short_text(query: types.CallbackQuery, callback_data: dict):
 async def try_send(*args, **kwargs):
     try:
         await bot.send_message(*args, **kwargs)
-    except UserDeactivated or BotBlocked:
-        pass
     except Exception as error:
         logging.exception(error)
-        ping_admin()
 
 
 async def news():
