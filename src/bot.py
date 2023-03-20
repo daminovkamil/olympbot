@@ -72,8 +72,13 @@ async def cmd_start(msg: types.Message):
 
         post = await olimpiada.get_post(25655)
         post_keyboard = types.InlineKeyboardMarkup()
-        post_keyboard.add(
-            types.InlineKeyboardButton("⇩Полный текст", callback_data=full_text_cb.new(post_id=post.post_id)))
+        if len(post.full_text()) < 4000:
+            post_keyboard.insert(
+                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post.post_id)))
+        post_keyboard.insert(
+            types.InlineKeyboardButton("Страница новости",
+                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % 25655))
+        )
         await msg.answer(post.short_text(), reply_markup=post_keyboard)
         await msg.answer("Также вам будут приходить уведомления. Например, такое:")
         await msg.answer("Через неделю заключительный этап\n"
@@ -96,8 +101,12 @@ async def query_full_text(query: types.CallbackQuery, callback_data: dict):
         await query.message.edit_reply_markup(downloading_keyboard)
         post = await olimpiada.get_post(post_id)
         keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(
-            types.InlineKeyboardButton("⇧Убрать текст", callback_data=short_text_cb.new(post_id=post_id)))
+        keyboard.insert(
+            types.InlineKeyboardButton("Скрыть текст", callback_data=short_text_cb.new(post_id=post_id)))
+        keyboard.insert(
+            types.InlineKeyboardButton("Страница новости",
+                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
+        )
         await query.message.edit_text(text=post.full_text(), reply_markup=keyboard)
     except Exception as error:
         logging.exception(error)
@@ -113,8 +122,13 @@ async def query_short_text(query: types.CallbackQuery, callback_data: dict):
         await query.message.edit_reply_markup(downloading_keyboard)
         post = await olimpiada.get_post(post_id)
         keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(
-            types.InlineKeyboardButton("⇩Полный текст", callback_data=full_text_cb.new(post_id=post_id)))
+        if len(post.full_text()) < 4000:
+            keyboard.insert(
+                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post_id)))
+        keyboard.insert(
+            types.InlineKeyboardButton("Страница новости",
+                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
+        )
         await query.message.edit_text(text=post.short_text(), reply_markup=keyboard)
     except Exception as error:
         logging.exception(error)
@@ -149,8 +163,13 @@ async def news():
 
         text = post.short_text()
         keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(
-            types.InlineKeyboardButton("⇩Полный текст", callback_data=full_text_cb.new(post_id=post_id)))
+        if len(post.full_text()) < 4000:
+            keyboard.insert(
+                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post_id)))
+        keyboard.insert(
+            types.InlineKeyboardButton("Страница новости",
+                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
+        )
         for user_id in database.news_filter(post.olimp, post.tags):
             await try_send(user_id, text=text, reply_markup=keyboard)
 

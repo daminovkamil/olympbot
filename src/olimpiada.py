@@ -72,7 +72,7 @@ async def get_post(post_id: int):
         if elem.name == "ul":
             text = ""
             for li in elem.find_all("li"):
-                text += '◾ ' + markdownify(str(li), strip=['li']).strip() + "\n"
+                text += '• ' + markdownify(str(li), strip=['li']).strip() + "\n"
             text_parts.append(text.strip())
     result.text = "\n\n".join(text_parts)
 
