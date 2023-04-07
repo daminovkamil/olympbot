@@ -138,6 +138,12 @@ async def query_short_text(query: types.CallbackQuery, callback_data: dict):
 async def try_send(*args, **kwargs):
     try:
         await bot.send_message(*args, **kwargs)
+    except BotBlocked or UserDeactivated:
+        if "chat_id" in kwargs:
+            user_id = kwargs["chat_id"]
+        else:
+            user_id = args[0]
+        await database.run("DELETE FROM users WHERE user_id = %s" % user_id)
     except Exception as error:
         logging.exception(error)
 

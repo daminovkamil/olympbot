@@ -34,7 +34,7 @@ def all(*args):
 class User:
     def __init__(self, user_id, data=None, settings=None):
         self.user_id = user_id
-        if data is None:
+        if data is None and one("SELECT COUNT(*) FROM users WHERE user_id = %s" % user_id):
             data, settings = one("SELECT data, settings FROM users WHERE user_id = %s", (user_id, ))
         if data is None:
             data = json.dumps({
