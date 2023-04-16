@@ -143,7 +143,7 @@ async def try_send(*args, **kwargs):
             user_id = kwargs["chat_id"]
         else:
             user_id = args[0]
-        await database.run("DELETE FROM users WHERE user_id = %s" % user_id)
+         database.run("DELETE FROM users WHERE user_id = %s" % user_id)
     except Exception as error:
         logging.exception(error)
 
