@@ -3,6 +3,7 @@ from markdownify import markdownify
 from bs4 import BeautifulSoup
 from datetime import *
 import requests
+import database
 
 session = requests.Session()
 
@@ -101,6 +102,13 @@ class Event:
     def __repr__(self):
         return f"Event #{self.activity_id}:{self.event_id} \"{self.event_name}\" from {self.first_date} to {self.second_date}"
 
+    def __eq__(self, other):
+        return (self.activity_id, self.event_id, self.event_name, self.first_date, self.second_date) == (
+            other.activity_id, other.event_id, other.event_name, other.first_date, other.second_date)
+
+    def __ne__(self, other):
+        return not (self == other)
+
 
 month_map = dict()
 month_map["янв"] = 1
@@ -151,19 +159,7 @@ async def get_date(date_string: str):
         return await day_and_month(day1, month1), await day_and_month(day2, month2)
 
 
-async def check_olympiad(activity_id):
-    page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
-    if not page.ok:
-        return False
-    soup = BeautifulSoup(page.text, "lxml")
-    table = soup.find(text="Расписание")
-    if table is None:
-        return False
-    else:
-        return True
-
-
-async def get_events(activity_id):
+async def activity_events(activity_id):
     page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
     if not page.ok:
         return []
@@ -184,4 +180,11 @@ async def get_events(activity_id):
             first_date, second_date = await get_date(date_string)
         event = Event(activity_id, event_id, event_name, first_date, second_date)
         result.append(event)
+    return result
+
+
+async def all_events():
+    result = []
+    for activity_id in database.all("SELECT activity_id FROM cool_olympiads"):
+        result += await activity_events(activity_id)
     return result

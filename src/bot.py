@@ -2,7 +2,7 @@ import requests
 from aiogram import Dispatcher, Bot, types, executor
 from aiogram.utils.callback_data import CallbackData
 from aiogram.types import ParseMode
-from aiogram.utils.exceptions import BotBlocked, UserDeactivated
+from aiogram.utils.exceptions import BotBlocked, UserDeactivated, BotKicked
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.types.web_app_info import WebAppInfo
 import json
@@ -100,6 +100,8 @@ async def query_full_text(query: types.CallbackQuery, callback_data: dict):
     try:
         await query.message.edit_reply_markup(downloading_keyboard)
         post = await olimpiada.get_post(post_id)
+        if post is None:
+            return
         keyboard = types.InlineKeyboardMarkup()
         keyboard.insert(
             types.InlineKeyboardButton("Скрыть текст", callback_data=short_text_cb.new(post_id=post_id)))
@@ -121,6 +123,8 @@ async def query_short_text(query: types.CallbackQuery, callback_data: dict):
     try:
         await query.message.edit_reply_markup(downloading_keyboard)
         post = await olimpiada.get_post(post_id)
+        if post is None:
+            return
         keyboard = types.InlineKeyboardMarkup()
         if len(post.full_text()) < 4000:
             keyboard.insert(
@@ -138,7 +142,7 @@ async def query_short_text(query: types.CallbackQuery, callback_data: dict):
 async def try_send(*args, **kwargs):
     try:
         await bot.send_message(*args, **kwargs)
-    except BotBlocked or UserDeactivated:
+    except (BotBlocked, UserDeactivated, BotKicked):
         if "chat_id" in kwargs:
             user_id = kwargs["chat_id"]
         else:
@@ -180,66 +184,113 @@ async def news():
             await try_send(user_id, text=text, reply_markup=keyboard)
 
 
+def load_event_from_db(event_id, activity_id):
+    result = database.one("SELECT * FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
+    if result is None:
+        return None
+    event_id, activity_id, event_name, first_date, second_date, stage = result
+    return olimpiada.Event(activity_id, event_id, event_name, first_date, second_date)
+
+
+def get_event_stage(event: olimpiada.Event):
+    # 0 - не надо присылать
+    # 1 - за неделю до события
+    # 2 - за три дня до события
+    # 3 - за день до события
+    # 4 - за три дня до конца события (длина события хотя бы 4 дня)
+    # 5 - за день до конца
+    # 6 - удалить событие
+    today = datetime.date.today()
+    if event.first_date is None:
+        days = (event.second_date - today).days()
+        if days <= 0:
+            return 6
+        if days == 1:
+            return 5
+        if days <= 3:
+            return 4
+        return 0
+    else:
+        days = (event.first_date - today).days()
+        if days <= 0:
+            if event.second_date is None or (event.second_date - event.first_date).days() < 5:
+                return 6
+            days = (event.second_date - today).days()
+            if days <= 0:
+                return 6
+            if days == 1:
+                return 5
+            if days <= 3:
+                return 4
+            return 3
+        else:
+            if days == 1:
+                return 3
+            if days <= 3:
+                return 2
+            if days <= 7:
+                return 1
+            return 0
+
+
+def save_event(event: olimpiada.Event):
+    event_id = event.event_id
+    activity_id = event.activity_id
+    event_name = event.event_name
+    first_date = event.first_date
+    second_date = event.second_date
+    stage = get_event_stage(event)
+    database.run("DELETE FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
+    database.run("INSERT INTO events (event_id, activity_id, event_name, first_date, second_date, stage)",
+                 (event_id, activity_id, event_name, first_date, second_date, stage))
+
+
+def days_word(days):
+    if days == 1:
+        return "Завтра"
+    if days % 10 == 1 and days != 11:
+        return "Через %s день" % days
+    if days % 10 in [2, 3, 4] and days not in [12, 13, 14]:
+        return "Через %s дня" % days
+    return "Через %s дней" % days
+
+
 async def events():
-    try:
-        for activity_id in database.all("SELECT activity_id FROM cool_olympiads"):
-            try:
-                db_events = database.all("SELECT event_id FROM olympiad_events WHERE activity_id = %s", (activity_id,))
-                current_events = []
-                current_date = datetime.date.today()
-                for event in await olimpiada.get_events(activity_id):
-                    stage = database.one("SELECT stage FROM olympiad_events WHERE activity_id = %s AND event_id = %s",
-                                   (activity_id, event.event_id))
-                    if stage is None:
-                        database.run("INSERT INTO olympiad_events (activity_id, event_id) values (%s, %s)",
-                               (activity_id, event.event_id))
-                        stage = 0
-                    if event.first_date is None:
-                        continue
+    for event in await olimpiada.all_events():
+        text = None
+        today = datetime.date.today()
+        activity_name = database.one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % event.activity_id)
+        event_name = event.event_name
+        event_name = event_name[0].lower() + event_name[1:]
+        activity_id = event.activity_id
+        event_in_db = load_event_from_db(event.event_id, event.activity_id)
+        stage_in_db = database.one("SELECT stage FROM events WHERE event_id = %s AND activity_id = %s", (event.event_id, activity_id))
+        if event_in_db is not None and event_in_db != event:
+            save_event(event)
+            if event.first_date < today:
+                days = (today - event.first_date).days
+                text = "**Изменено!**\n" \
+                       f"**{days_word(days)}** будет {event_name}\n" \
+                       f"[{activity_name}]({activity_id})"
+            elif event.second_date > today:
+                days = (event.second_date - today).days
+                text = "**Изменено!\n" \
+                       f"**{days_word(days)}** закончится {event_name}\n" \
+                       f"[{activity_name}]({activity_id})"
+        elif get_event_stage(event) != stage_in_db:
+            save_event(event)
+            if event.first_date < today:
+                days = (today - event.first_date).days
+                text = f"**{days_word(days)}** будет {event_name}\n" \
+                       f"[{activity_name}]({activity_id})"
+            elif event.second_date > today:
+                days = (event.second_date - today).days
+                text = f"**{days_word(days)}** закончится {event_name}\n" \
+                       f"[{activity_name}]({activity_id})"
 
-                    if stage != 1 and event.first_date - datetime.timedelta(days=1) == current_date:
-                        database.run("UPDATE olympiad_events SET stage = 1 WHERE activity_id = %s AND event_id = %s",
-                               (activity_id, event.event_id))
-                        for user_id in database.notifications_filter(activity_id):
-                            activity_name = database.one(
-                                "SELECT activity_name FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
-                            activity_link = f"https://olimpiada.ru/activity/{activity_id}"
-                            text = f"*Через день* {event.event_name.lower()}\n" \
-                                   f"[{activity_name}]({activity_link})"
-                            await try_send(user_id, text)
-                    if stage != 2 and event.first_date - datetime.timedelta(days=3) == current_date:
-                        database.run("UPDATE olympiad_events SET stage = 2 WHERE activity_id = %s AND event_id = %s",
-                               (activity_id, event.event_id))
-                        for user_id in database.notifications_filter(activity_id):
-                            activity_name = database.one(
-                                "SELECT activity_name FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
-                            activity_link = f"https://olimpiada.ru/activity/{activity_id}"
-                            text = f"*Через 3 дня* {event.event_name.lower()}\n" \
-                                   f"[{activity_name}]({activity_link})"
-                            await try_send(user_id, text)
-                    if stage != 3 and event.first_date - datetime.timedelta(days=7) == current_date:
-                        database.run("UPDATE olympiad_events SET stage = 3 WHERE activity_id = %s AND event_id = %s",
-                               (activity_id, event.event_id))
-                        for user_id in database.notifications_filter(activity_id):
-                            activity_name = database.one(
-                                "SELECT activity_name FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
-                            activity_link = f"https://olimpiada.ru/activity/{activity_id}"
-                            text = f"*Через неделю* {event.event_name.lower()}\n" \
-                                   f"[{activity_name}]({activity_link})"
-                            await try_send(user_id, text)
-                    current_events.append(event.event_id)
-
-                for event_id in db_events:
-                    if event_id not in current_events:
-                        database.run("DELETE FROM olympiad_events WHERE activity_id = %s AND event_id = %s",
-                               (activity_id, event_id))
-            except Exception as error:
-                logging.exception(error)
-                ping_admin(f"Проблемы с activity_id = {activity_id} в функции events")
-            await asyncio.sleep(1)
-    except Exception as error:
-        logging.exception(error)
-        ping_admin("Какая-то проблема с функцией events")
+        if text is not None:
+            for user in database.notifications_filter(event.activity_id):
+                await try_send(user.user_id, text)
     await asyncio.sleep(3600)
 
 
@@ -247,5 +298,5 @@ if __name__ == "__main__":
     logging.basicConfig(filename="log", filemode="w")
     loop = asyncio.get_event_loop()
     loop.create_task(news())
-    loop.create_task(events())
+    # loop.create_task(events())
     executor.start_polling(dp, skip_updates=True)
