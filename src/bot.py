@@ -101,6 +101,15 @@ async def query_full_text(query: types.CallbackQuery, callback_data: dict):
         await query.message.edit_reply_markup(downloading_keyboard)
         post = await olimpiada.get_post(post_id)
         if post is None:
+            await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
+            keyboard = types.InlineKeyboardMarkup()
+            keyboard.insert(
+                types.InlineKeyboardButton("Показать текст", callback_data=short_text_cb.new(post_id=post_id)))
+            keyboard.insert(
+                types.InlineKeyboardButton("Страница новости",
+                                           web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
+            )
+            await query.message.edit_reply_markup(reply_markup=keyboard)
             return
         keyboard = types.InlineKeyboardMarkup()
         keyboard.insert(
@@ -124,6 +133,15 @@ async def query_short_text(query: types.CallbackQuery, callback_data: dict):
         await query.message.edit_reply_markup(downloading_keyboard)
         post = await olimpiada.get_post(post_id)
         if post is None:
+            await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
+            keyboard = types.InlineKeyboardMarkup()
+            keyboard.insert(
+                types.InlineKeyboardButton("Скрыть текст", callback_data=short_text_cb.new(post_id=post_id)))
+            keyboard.insert(
+                types.InlineKeyboardButton("Страница новости",
+                                           web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
+            )
+            await query.message.edit_reply_markup(reply_markup=keyboard)
             return
         keyboard = types.InlineKeyboardMarkup()
         if len(post.full_text()) < 4000:
@@ -202,7 +220,7 @@ def get_event_stage(event: olimpiada.Event):
     # 6 - удалить событие
     today = datetime.date.today()
     if event.first_date is None:
-        days = (event.second_date - today).days()
+        days = (event.second_date - today).days
         if days <= 0:
             return 6
         if days == 1:
@@ -211,11 +229,11 @@ def get_event_stage(event: olimpiada.Event):
             return 4
         return 0
     else:
-        days = (event.first_date - today).days()
+        days = (event.first_date - today).days
         if days <= 0:
-            if event.second_date is None or (event.second_date - event.first_date).days() < 5:
+            if event.second_date is None or (event.second_date - event.first_date).days < 5:
                 return 6
-            days = (event.second_date - today).days()
+            days = (event.second_date - today).days
             if days <= 0:
                 return 6
             if days == 1:
@@ -257,6 +275,7 @@ def days_word(days):
 
 async def events():
     for event in await olimpiada.all_events():
+        print(get_event_stage(event))
         text = None
         today = datetime.date.today()
         activity_name = database.one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % event.activity_id)

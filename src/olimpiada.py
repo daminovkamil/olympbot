@@ -1,12 +1,14 @@
 """Файл отвечает за запросы к сайту"""
+import asyncio
+
 from markdownify import markdownify
 from bs4 import BeautifulSoup
 from datetime import *
 import requests
 import database
+from random import randint
 
 session = requests.Session()
-
 
 def md(*args, **kwargs):
     return markdownify(*args, **kwargs).replace("\xa0", " ")
@@ -47,12 +49,17 @@ class Post:
 async def get_post(post_id: int):
     """Получаем данные с какой-то новости на сайте olimpiada.ru"""
 
-    page = session.get(f"https://olimpiada.ru/news/{post_id}/")
+    url = "https://olimpiada.ru/news/%s/" % post_id
+    page_html = database.one("SELECT html FROM pages WHERE url = %s", (url, ))
 
-    if not page.ok:
-        return None
+    if page_html is None:
+        page = session.get(f"https://olimpiada.ru/news/{post_id}/")
+        if not page.ok:
+            return None
+        page_html = page.text
+        database.run("INSERT INTO pages (url, html) VALUES (%s, %s)", (url, page_html))
 
-    soup = BeautifulSoup(page.text, "lxml")
+    soup = BeautifulSoup(page_html, "lxml")
     result = Post(post_id)
 
     left_part = soup.find("div", class_="news_left")  # часть с текстом поста
