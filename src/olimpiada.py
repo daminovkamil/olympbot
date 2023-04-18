@@ -4,11 +4,21 @@ import asyncio
 from markdownify import markdownify
 from bs4 import BeautifulSoup
 from datetime import *
-import requests
+import undetected_chromedriver as uc
 import database
 from random import randint
 
-session = requests.Session()
+driver = uc.Chrome()
+
+
+async def get_page(url: str):
+    driver.get(url)
+    await asyncio.sleep(20)
+    if "ddos" in driver.title.lower():
+        return None
+    else:
+        return driver.page_source
+
 
 def md(*args, **kwargs):
     return markdownify(*args, **kwargs).replace("\xa0", " ")
@@ -53,8 +63,8 @@ async def get_post(post_id: int):
     page_html = database.one("SELECT html FROM pages WHERE url = %s", (url, ))
 
     if page_html is None:
-        page = session.get(f"https://olimpiada.ru/news/{post_id}/")
-        if not page.ok:
+        page = await get_page(f"https://olimpiada.ru/news/{post_id}/")
+        if page is None:
             return None
         page_html = page.text
         database.run("INSERT INTO pages (url, html) VALUES (%s, %s)", (url, page_html))
@@ -174,8 +184,8 @@ async def get_date(date_string: str):
 
 
 async def activity_events(activity_id):
-    page = session.get(f"https://olimpiada.ru/activity/{activity_id}")
-    if not page.ok:
+    page = await get_page(f"https://olimpiada.ru/activity/{activity_id}")
+    if page is None:
         return []
     soup = BeautifulSoup(page.text, "lxml")
     table = soup.find("table", class_="events_for_activity")
@@ -219,4 +229,3 @@ async def collecting_events():
             for event in await activity_events(activity_id):
                 if event != await load_event_from_db(event.event_id, event.activity_id):
                     event.save()
-            await asyncio.sleep(60)
