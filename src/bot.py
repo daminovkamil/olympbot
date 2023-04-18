@@ -104,7 +104,7 @@ async def query_full_text(query: types.CallbackQuery, callback_data: dict):
             await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
             keyboard = types.InlineKeyboardMarkup()
             keyboard.insert(
-                types.InlineKeyboardButton("Показать текст", callback_data=short_text_cb.new(post_id=post_id)))
+                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post_id)))
             keyboard.insert(
                 types.InlineKeyboardButton("Страница новости",
                                            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
