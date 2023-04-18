@@ -99,12 +99,13 @@ async def get_post(post_id: int):
 
 
 class Event:
-    def __init__(self, activity_id, event_id, event_name, first_date, second_date):
+    def __init__(self, activity_id, event_id, event_name, first_date, second_date, stage):
         self.activity_id = activity_id
         self.event_id = event_id
         self.event_name = event_name
         self.first_date = first_date
         self.second_date = second_date
+        self.stage = stage
 
     def __repr__(self):
         return f"Event #{self.activity_id}:{self.event_id} \"{self.event_name}\" from {self.first_date} to {self.second_date}"
@@ -115,6 +116,12 @@ class Event:
 
     def __ne__(self, other):
         return not (self == other)
+
+    def save(self):
+        database.run("DELETE FROM events WHERE event_id = %s AND activity_id = %s", (self.event_id, self.activity_id))
+        database.run("INSERT INTO events (event_id, activity_id, event_name, first_date, second_date, stage) VALUES "
+                     "(%s, %s, %s, %s, %s, %s)",
+                     (self.event_id, self.activity_id, self.event_name, self.first_date, self.second_date, self.stage))
 
 
 month_map = dict()
@@ -192,6 +199,24 @@ async def activity_events(activity_id):
 
 async def all_events():
     result = []
-    for activity_id in database.all("SELECT activity_id FROM cool_olympiads"):
-        result += await activity_events(activity_id)
+    rows = database.all("SELECT * FROM events")
+    for event_id, activity_id, event_name, first_date, second_date, stage in rows:
+        result.append(Event(activity_id, event_id, event_name, first_date, second_date, stage))
     return result
+
+
+async def load_event_from_db(event_id, activity_id):
+    result = database.one("SELECT * FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
+    if result is None:
+        return None
+    event_id, activity_id, event_name, first_date, second_date, stage = result
+    return Event(activity_id, event_id, event_name, first_date, second_date, stage)
+
+
+async def collecting_events():
+    while True:
+        for activity_id in database.all("SELECT activity_id FROM cool_olympiads"):
+            for event in await activity_events(activity_id):
+                if event != await load_event_from_db(event.event_id, event.activity_id):
+                    event.save()
+            await asyncio.sleep(3600)

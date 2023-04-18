@@ -202,14 +202,6 @@ async def news():
             await try_send(user_id, text=text, reply_markup=keyboard)
 
 
-def load_event_from_db(event_id, activity_id):
-    result = database.one("SELECT * FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
-    if result is None:
-        return None
-    event_id, activity_id, event_name, first_date, second_date, stage = result
-    return olimpiada.Event(activity_id, event_id, event_name, first_date, second_date)
-
-
 def get_event_stage(event: olimpiada.Event):
     # 0 - не надо присылать
     # 1 - за неделю до события
@@ -251,18 +243,6 @@ def get_event_stage(event: olimpiada.Event):
             return 0
 
 
-def save_event(event: olimpiada.Event):
-    event_id = event.event_id
-    activity_id = event.activity_id
-    event_name = event.event_name
-    first_date = event.first_date
-    second_date = event.second_date
-    stage = get_event_stage(event)
-    database.run("DELETE FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
-    database.run("INSERT INTO events (event_id, activity_id, event_name, first_date, second_date, stage)",
-                 (event_id, activity_id, event_name, first_date, second_date, stage))
-
-
 def days_word(days):
     if days == 1:
         return "Завтра"
@@ -275,29 +255,15 @@ def days_word(days):
 
 async def events():
     for event in await olimpiada.all_events():
-        print(get_event_stage(event))
         text = None
         today = datetime.date.today()
         activity_name = database.one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % event.activity_id)
         event_name = event.event_name
         event_name = event_name[0].lower() + event_name[1:]
         activity_id = event.activity_id
-        event_in_db = load_event_from_db(event.event_id, event.activity_id)
-        stage_in_db = database.one("SELECT stage FROM events WHERE event_id = %s AND activity_id = %s", (event.event_id, activity_id))
-        if event_in_db is not None and event_in_db != event:
-            save_event(event)
-            if event.first_date < today:
-                days = (today - event.first_date).days
-                text = "**Изменено!**\n" \
-                       f"**{days_word(days)}** будет {event_name}\n" \
-                       f"[{activity_name}]({activity_id})"
-            elif event.second_date > today:
-                days = (event.second_date - today).days
-                text = "**Изменено!\n" \
-                       f"**{days_word(days)}** закончится {event_name}\n" \
-                       f"[{activity_name}]({activity_id})"
-        elif get_event_stage(event) != stage_in_db:
-            save_event(event)
+        if get_event_stage(event) != event.stage:
+            event.stage = get_event_stage(event)
+            event.save()
             if event.first_date < today:
                 days = (today - event.first_date).days
                 text = f"**{days_word(days)}** будет {event_name}\n" \
@@ -306,7 +272,6 @@ async def events():
                 days = (event.second_date - today).days
                 text = f"**{days_word(days)}** закончится {event_name}\n" \
                        f"[{activity_name}]({activity_id})"
-
         if text is not None:
             for user in database.notifications_filter(event.activity_id):
                 await try_send(user.user_id, text)
@@ -317,5 +282,6 @@ if __name__ == "__main__":
     logging.basicConfig(filename="log", filemode="w")
     loop = asyncio.get_event_loop()
     loop.create_task(news())
-    # loop.create_task(events())
+    loop.create_task(events())
+    loop.create_task(olimpiada.collecting_events())
     executor.start_polling(dp, skip_updates=True)
