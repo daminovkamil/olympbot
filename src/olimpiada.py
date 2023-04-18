@@ -219,4 +219,4 @@ async def collecting_events():
             for event in await activity_events(activity_id):
                 if event != await load_event_from_db(event.event_id, event.activity_id):
                     event.save()
-            await asyncio.sleep(3600)
+            await asyncio.sleep(60)
