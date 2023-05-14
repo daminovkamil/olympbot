@@ -257,6 +257,8 @@ def get_event_stage(event: olimpiada.Event):
 def days_word(days):
     if days == 1:
         return "Завтра"
+    if days == 0:
+        return "Сегодня"
     if days % 10 == 1 and days != 11:
         return "Через %s день" % days
     if days % 10 in [2, 3, 4] and days not in [12, 13, 14]:
@@ -268,10 +270,10 @@ async def events():
     for event in await olimpiada.all_events():
         text = None
         today = datetime.date.today()
-        activity_name = database.one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % event.activity_id)
+        activity_id = event.activity_id
+        activity_name = database.one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % activity_id)
         event_name = event.event_name
         event_name = event_name[0].lower() + event_name[1:]
-        activity_id = event.activity_id
         if get_event_stage(event) != event.stage:
             event.stage = get_event_stage(event)
             if event.stage == 6:
