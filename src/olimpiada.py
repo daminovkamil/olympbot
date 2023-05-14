@@ -1,23 +1,23 @@
 """Файл отвечает за запросы к сайту"""
 import asyncio
 
+import requests
 from markdownify import markdownify
 from bs4 import BeautifulSoup
 from datetime import *
-import undetected_chromedriver as uc
 import database
 from random import randint
 
-driver = uc.Chrome()
+
+session = requests.Session()
 
 
 async def get_page(url: str):
-    driver.get(url)
-    await asyncio.sleep(20)
-    if "ddos" in driver.title.lower():
-        return None
+    page = session.get(url)
+    if page.ok and 'ddos' not in page.text.lower():
+        return page
     else:
-        return driver.page_source
+        return None
 
 
 def md(*args, **kwargs):
@@ -121,6 +121,8 @@ class Event:
         return f"Event #{self.activity_id}:{self.event_id} \"{self.event_name}\" from {self.first_date} to {self.second_date}"
 
     def __eq__(self, other):
+        if other is None:
+            return False
         return (self.activity_id, self.event_id, self.event_name, self.first_date, self.second_date) == (
             other.activity_id, other.event_id, other.event_name, other.first_date, other.second_date)
 
@@ -132,6 +134,9 @@ class Event:
         database.run("INSERT INTO events (event_id, activity_id, event_name, first_date, second_date, stage) VALUES "
                      "(%s, %s, %s, %s, %s, %s)",
                      (self.event_id, self.activity_id, self.event_name, self.first_date, self.second_date, self.stage))
+
+    def delete(self):
+        database.run("DELETE FROM events WHERE event_id = %s AND activity_id = %s", (self.event_id, self.activity_id))
 
 
 month_map = dict()
@@ -202,7 +207,7 @@ async def activity_events(activity_id):
             first_date, second_date = date.today(), date.today()
         else:
             first_date, second_date = await get_date(date_string)
-        event = Event(activity_id, event_id, event_name, first_date, second_date)
+        event = Event(activity_id, event_id, event_name, first_date, second_date, 0)
         result.append(event)
     return result
 
@@ -229,3 +234,4 @@ async def collecting_events():
             for event in await activity_events(activity_id):
                 if event != await load_event_from_db(event.event_id, event.activity_id):
                     event.save()
+            await asyncio.sleep(10)

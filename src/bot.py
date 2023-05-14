@@ -80,9 +80,13 @@ async def cmd_start(msg: types.Message):
                                        web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % 25655))
         )
         await msg.answer(post.short_text(), reply_markup=post_keyboard)
-        await msg.answer("Также вам будут приходить уведомления. Например, такое:")
-        await msg.answer("Через неделю заключительный этап\n"
-                         "[Всесибирская олимпиада школьников по информатике](https://olimpiada.ru/activity/316)")
+        await msg.answer("Также вам будут приходить уведомления. Например, такие:")
+        await msg.answer("*Через 6 дней* будет пригласительный этап для 7-10 классов, точнее *в четверг 12.05.2023*.\n"
+                         "\n"
+                         "[Всероссийская олимпиада по математике](https://olimpiada.ru/activity/72)")
+        await msg.answer("*Через 2 дня* закончится международный форум, точнее *в воскресенье 20.05.2023*.\n"
+                         "\n"
+                         "[Конференция «Шаг в будущее»](https://olimpiada.ru/activity/4310)")
         await msg.answer("‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопки около клавиатуры.")
         await msg.answer("Вся информация берётся с сайта [olimpiada.ru](https://olimpiada.ru/). За "
                          "что мы приносим огромную благодарность всем людям, которые "
@@ -203,15 +207,13 @@ async def news():
 
 
 def get_event_stage(event: olimpiada.Event):
-    # 0 - не надо присылать
-    # 1 - за неделю до события
-    # 2 - за три дня до события
-    # 3 - за день до события
-    # 4 - за три дня до конца события (длина события хотя бы 4 дня)
-    # 5 - за день до конца
-    # 6 - удалить событие
     today = datetime.date.today()
     if event.first_date is None:
+        # 0 - не надо присылать
+        # 3 - за неделю до конца
+        # 4 - за три дня до конца
+        # 5 - за день до конца
+        # 6 - удалить событие
         days = (event.second_date - today).days
         if days <= 0:
             return 6
@@ -219,8 +221,17 @@ def get_event_stage(event: olimpiada.Event):
             return 5
         if days <= 3:
             return 4
+        if days <= 7:
+            return 3
         return 0
     else:
+        # 0 - не надо присылать
+        # 1 - за неделю до события
+        # 2 - за три дня до события
+        # 3 - за день до события
+        # 4 - за три дня до конца события (длина события хотя бы 4 дня)
+        # 5 - за день до конца
+        # 6 - удалить событие
         days = (event.first_date - today).days
         if days <= 0:
             if event.second_date is None or (event.second_date - event.first_date).days < 5:
@@ -263,15 +274,26 @@ async def events():
         activity_id = event.activity_id
         if get_event_stage(event) != event.stage:
             event.stage = get_event_stage(event)
-            event.save()
-            if event.first_date < today:
-                days = (today - event.first_date).days
-                text = f"**{days_word(days)}** будет {event_name}\n" \
-                       f"[{activity_name}]({activity_id})"
-            elif event.second_date > today:
+            if event.stage == 6:
+                event.delete()
+                continue
+            else:
+                event.save()
+            weekdays = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
+            if event.first_date is not None and event.first_date > today:
+                days = (event.first_date - today).days
+                weekday = weekdays[event.first_date.weekday()]
+                text = f"*{days_word(days)}* будет {event_name}, " \
+                       f"точнее *в {weekday} {event.first_date.strftime('%d.%m.%Y')}*.\n" \
+                       f"\n" \
+                       f"[{activity_name}](https://olimpiada.ru/activity/{activity_id})"
+            elif event.second_date is not None and event.second_date > today:
                 days = (event.second_date - today).days
-                text = f"**{days_word(days)}** закончится {event_name}\n" \
-                       f"[{activity_name}]({activity_id})"
+                weekday = weekdays[event.second_date.weekday()]
+                text = f"*{days_word(days)}* закончится {event_name}, " \
+                       f"точнее *в {weekday} {event.second_date.strftime('%d.%m.%Y')}*.\n" \
+                       f"\n" \
+                       f"[{activity_name}](https://olimpiada.ru/activity/{activity_id})"
         if text is not None:
             for user in database.notifications_filter(event.activity_id):
                 await try_send(user.user_id, text)
