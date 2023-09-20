@@ -2,14 +2,26 @@
 import asyncio
 
 import requests
-from markdownify import markdownify
 from bs4 import BeautifulSoup
 from datetime import *
+from aiogram.utils.formatting import Text, TextLink
 import database
-from random import randint
+import markdownify
 
 
 session = requests.Session()
+
+
+class MyConverter(markdownify.MarkdownConverter):
+    def escape(self, text):
+        if not text:
+            return ''
+        return Text(text).as_markdown()
+
+
+def md(html, **options):
+    html = html.replace("\xa0", " ")
+    return MyConverter(**options, bullets='•').convert(html)
 
 
 async def get_page(url: str):
@@ -18,10 +30,6 @@ async def get_page(url: str):
         return page
     else:
         return None
-
-
-def md(*args, **kwargs):
-    return markdownify(*args, **kwargs).replace("\xa0", " ")
 
 
 class Post:
@@ -42,18 +50,18 @@ class Post:
         self.tags = tags if tags is not None else []
 
     def short_text(self):
-        text = f"[{self.head}](https://olimpiada.ru/news/{self.post_id})"
-        text += "\n\n"
-        text += " ".join(["#" + tag.replace(" ", "") for tag in self.tags])
-        return text
+        result: str = TextLink(self.head, url=f"https://olimpiada.ru/news/{self.post_id}").as_markdown()
+        result += "\n\n"
+        result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
+        return result
 
     def full_text(self):
-        text = f"[{self.head}](https://olimpiada.ru/news/{self.post_id})"
-        text += "\n\n"
-        text += self.text
-        text += "\n\n"
-        text += " ".join(["#" + tag.replace(" ", "") for tag in self.tags])
-        return text
+        result: str = TextLink(self.head, url=f"https://olimpiada.ru/news/{self.post_id}").as_markdown()
+        result += "\n\n"
+        result += self.text
+        result += "\n\n"
+        result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
+        return result
 
 
 async def get_post(post_id: int):
@@ -78,25 +86,20 @@ async def get_post(post_id: int):
     head_part = soup.find("h1", class_="headline")  # часть с заголовком
 
     # пытаемся добыть заголовок
-    result.head = md(str(head_part), strip=['h1'])
+    result.head = md(head_part.text)
 
     # пытаемся добыть основной текст
     full_text = left_part.find("div", class_="full_text")
     text_parts = []
 
     for elem in full_text.contents:
-        if elem.name == "p" or elem.name == "ol":
-            text_parts.append(markdownify(str(elem)).strip())
-        if elem.name == "ul":
-            text = ""
-            for li in elem.find_all("li"):
-                text += '• ' + markdownify(str(li), strip=['li']).strip() + "\n"
-            text_parts.append(text.strip())
+        if elem.name in ["p", "ul", "ol"]:
+            text_parts.append(md(str(elem)).strip())
     result.text = "\n\n".join(text_parts)
 
     # пытаемся добыть теги
     for subject_tag in subject_tags.find_all("span", class_="subject_tag"):
-        text = md(str(subject_tag))[1:]
+        text = md(subject_tag.text[1:])
         result.tags.append(text)
 
     # пытаемся добыть олимпиаду, которая связанна с постом

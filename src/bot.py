@@ -1,32 +1,68 @@
-import requests
-from aiogram import Dispatcher, Bot, types, executor
-from aiogram.utils.callback_data import CallbackData
-from aiogram.types import ParseMode
-from aiogram.utils.exceptions import BotBlocked, UserDeactivated, BotKicked
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram import Dispatcher
+from aiogram.types import ErrorEvent
 from aiogram.types.web_app_info import WebAppInfo
-import json
+from aiogram.types import Message, CallbackQuery
+from aiogram.utils.formatting import Text, Bold, TextLink
+from aiogram.enums import ParseMode
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.filters.callback_data import CallbackData
+from aiogram.filters import Command
+from aiogram import Bot, F
 
+import json
 import database
 import olimpiada
 import config
 import asyncio
 import logging
 import datetime
+import requests
+import sys
 
-bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
-dp = Dispatcher(bot, storage=MemoryStorage())
+bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
+
+dp = Dispatcher()
 
 
-full_text_cb = CallbackData("full_text", "post_id")
-short_text_cb = CallbackData("short_text", "post_id")
+class ViewFullText(CallbackData, prefix="full_text"):
+    post_id: int
 
 
-@dp.message_handler(content_types='web_app_data')
-async def getting_web_data(msg: types.Message):
-    user_id = msg.from_user.id
+class ViewShortText(CallbackData, prefix="short_text"):
+    post_id: int
+
+
+async def try_send(*args, **kwargs):
+    try:
+        await bot.send_message(*args, **kwargs)
+    except Exception as error:
+        logging.debug(error)
+
+
+async def try_delete(*args, **kwargs):
+    try:
+        await bot.delete_message(*args, **kwargs)
+    except Exception as error:
+        logging.debug(error)
+
+
+@dp.error(F.update.message.as_("message"))
+async def message_error_handler(event: ErrorEvent, message: Message):
+    logging.critical("Critical error caused by %s", event.exception, exc_info=True)
+    await message.answer(Text("Возникла ошибка(( Обратитесь, пожалуйста, к разработчику").as_markdown())
+
+
+@dp.error(F.update.callback_query.as_("query"))
+async def query_error_handler(event: ErrorEvent, query: CallbackQuery):
+    logging.critical("Critical error caused by %s", event.exception, exc_info=True)
+    await query.answer("Возникла ошибка(( Обратитесь, пожалуйста, к разработчику", cache_time=20)
+
+
+@dp.message(F.web_app_data)
+async def getting_web_data(message: Message):
+    user_id = message.from_user.id
     user = database.User(user_id)
-    web_app_data = msg.web_app_data
+    web_app_data = message.web_app_data
     if web_app_data.button_text == "Предметы":
         data = json.loads(web_app_data.data)
         user.subjects = data["subjects"]
@@ -43,9 +79,197 @@ async def getting_web_data(msg: types.Message):
         user.notifications_enabled = data["notifications_enabled"]
         user.save()
     try:
-        await msg.delete()
+        await message.delete()
     except Exception as error:
         logging.error(error)
+
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    user_id = message.from_user.id
+
+    keyboard = ReplyKeyboardBuilder()
+    keyboard.button(
+        text="Предметы",
+        web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/subjects/%s" % user_id)
+    )
+    keyboard.button(
+        text="Олимпиады",
+        web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/olympiads/%s" % user_id)
+    )
+    keyboard.button(
+        text="Настройки",
+        web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/settings/%s" % user_id)
+    )
+    keyboard.adjust(3)
+
+    if not database.check_user_exist(user_id):
+        database.User(user_id)
+        await message.answer(
+            Text("Привет!").as_markdown(),
+            reply_markup=keyboard.as_markup()
+        )
+        await message.answer(
+            Text(
+                "Данный",
+                " ",
+                Bold("неофициальный"),
+                " ",
+                "бот создан, чтобы облегчить вашу жизнь)"
+            ).as_markdown()
+        )
+        await message.answer(
+            Text("Он будет присылать новости. Например, такие:").as_markdown()
+        )
+
+        post = await olimpiada.get_post(25655)
+        post_keyboard = InlineKeyboardBuilder()
+
+        if len(post.full_text()) < 4000:
+            post_keyboard.button(
+                text="Показать текст",
+                callback_data=ViewFullText(post_id=post.post_id)
+            )
+
+        post_keyboard.button(
+            text="Страница новости",
+            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % 25655)
+        )
+
+        post_keyboard.adjust(2)
+
+        await message.answer(post.short_text(), reply_markup=post_keyboard.as_markup())
+        await message.answer(
+            Text("Также вам будут приходить уведомления. Например, такие:").as_markdown()
+        )
+        await message.answer(
+            Text(
+                Bold("Через 6 дней"),
+                " ",
+                "будет пригласительный этап для 7-10 классов, точнее",
+                " ",
+                Bold("в четверг 12.05.2023"),
+                "\n\n",
+                TextLink(
+                    "Всероссийская олимпиада по математике",
+                    url="https://olimpiada.ru/activity/72",
+                )
+            ).as_markdown()
+        )
+        await message.answer(
+            Text(
+                Bold("Через 2 дня"),
+                " ",
+                "закончится международный форум, точнее",
+                " ",
+                Bold("в воскресенье 20.05.2023"),
+                "\n\n",
+                TextLink(
+                    "Конференция «Шаг в будущее»",
+                    url="https://olimpiada.ru/activity/4310"
+                )
+            ).as_markdown()
+        )
+        await message.answer(
+            Text("‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопки около клавиатуры.").as_markdown()
+        )
+        await message.answer(
+            Text(
+                "Вся информация берётся с сайта",
+                " ",
+                TextLink(
+                    "olimpiada.ru",
+                    url="https://olimpiada.ru/"
+                ),
+                ".",
+                " ",
+                "За что мы приносим огромную благодарность всем людям, которые связаны с этим замечательным сайтом!"
+            ).as_markdown()
+        )
+    else:
+        await message.answer(
+            Text("Привет!").as_markdown(),
+            reply_markup=keyboard.as_markup()
+        )
+        await message.answer(
+            Text("Данный неофициальный бот всё еще может помочь вам следить за олимпиадами)").as_markdown()
+        )
+
+
+@dp.callback_query(ViewFullText.filter())
+async def query_full_text(query: CallbackQuery, callback_data: ViewFullText):
+    post_id = callback_data.post_id
+    downloading_keyboard = InlineKeyboardBuilder()
+    downloading_keyboard.button(text="Загрузка...", callback_data="None")
+    await query.message.edit_reply_markup(reply_markup=downloading_keyboard.as_markup())
+    post = await olimpiada.get_post(post_id)
+    if post is None:
+        await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
+        keyboard = InlineKeyboardBuilder()
+        keyboard.button(
+            text="Показать текст",
+            callback_data=ViewFullText(post_id=post_id)
+        )
+        keyboard.button(
+            text="Страница новости",
+            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
+        )
+        await query.message.edit_reply_markup(reply_markup=keyboard.as_markup())
+        return
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(
+        text="Скрыть текст",
+        callback_data=ViewShortText(post_id=post_id)
+    )
+    keyboard.button(
+        text="Страница новости",
+        web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
+    )
+    keyboard.adjust(2)
+    print(post.full_text())
+    await query.message.edit_text(text=post.full_text(), reply_markup=keyboard.as_markup())
+
+
+@dp.callback_query(ViewShortText.filter())
+async def query_short_text(query: CallbackQuery, callback_data: ViewShortText):
+    post_id = callback_data.post_id
+
+    downloading_keyboard = InlineKeyboardBuilder()
+    downloading_keyboard.button(
+        text="Загрузка...",
+        callback_data="None"
+    )
+
+    await query.message.edit_reply_markup(
+        reply_markup=downloading_keyboard.as_markup()
+    )
+
+    post = await olimpiada.get_post(post_id)
+    if post is None:
+        await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
+        keyboard = InlineKeyboardBuilder()
+        keyboard.button(
+            text="Скрыть текст",
+            callback_data=ViewShortText(post_id=post_id)
+        )
+        keyboard.button(
+            text="Страница новости",
+            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
+        )
+        await query.message.edit_reply_markup(reply_markup=keyboard.as_markup())
+        return
+    keyboard = InlineKeyboardBuilder()
+    if len(post.full_text()) < 4000:
+        keyboard.button(
+            text="Показать текст",
+            callback_data=ViewFullText(post_id=post_id)
+        )
+    keyboard.button(
+        text="Страница новости",
+        web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
+    )
+    keyboard.adjust(2)
+    await query.message.edit_text(text=post.short_text(), reply_markup=keyboard.as_markup())
 
 
 def ping_admin(text="Советую посмотреть логи) У кого-то что-то сломалось"):
@@ -54,129 +278,9 @@ def ping_admin(text="Советую посмотреть логи) У кого-�
     requests.get(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}")
 
 
-@dp.message_handler(commands="start")
-async def cmd_start(msg: types.Message):
-    user_id = msg.from_user.id
-
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
-    keyboard.insert(types.KeyboardButton(text="Предметы",
-                                         web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/subjects/%s" % user_id)))
-    keyboard.insert(types.KeyboardButton(text="Олимпиады", web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/olympiads/%s" % user_id)))
-    keyboard.insert(types.KeyboardButton(text="Настройки", web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/settings/%s" % user_id)))
-
-    if not database.check_user_exist(user_id):
-        user = database.User(user_id)
-        await msg.answer("Привет!", reply_markup=keyboard)
-        await msg.answer("Данный **неофициальный** бот создан, чтобы облегчить вашу жизнь)")
-        await msg.answer("Он будет присылать новости. Например, такие:")
-
-        post = await olimpiada.get_post(25655)
-        post_keyboard = types.InlineKeyboardMarkup()
-        if len(post.full_text()) < 4000:
-            post_keyboard.insert(
-                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post.post_id)))
-        post_keyboard.insert(
-            types.InlineKeyboardButton("Страница новости",
-                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % 25655))
-        )
-        await msg.answer(post.short_text(), reply_markup=post_keyboard)
-        await msg.answer("Также вам будут приходить уведомления. Например, такие:")
-        await msg.answer("*Через 6 дней* будет пригласительный этап для 7-10 классов, точнее *в четверг 12.05.2023*.\n"
-                         "\n"
-                         "[Всероссийская олимпиада по математике](https://olimpiada.ru/activity/72)")
-        await msg.answer("*Через 2 дня* закончится международный форум, точнее *в воскресенье 20.05.2023*.\n"
-                         "\n"
-                         "[Конференция «Шаг в будущее»](https://olimpiada.ru/activity/4310)")
-        await msg.answer("‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопки около клавиатуры.")
-        await msg.answer("Вся информация берётся с сайта [olimpiada.ru](https://olimpiada.ru/). За "
-                         "что мы приносим огромную благодарность всем людям, которые "
-                         "связаны с этим замечательным сайтом!)")
-    else:
-        await msg.answer("Привет!", reply_markup=keyboard)
-        await msg.answer("Данный неофициальный бот всё еще может помочь вам следить за олимпиадами)")
-
-
-@dp.callback_query_handler(full_text_cb.filter())
-async def query_full_text(query: types.CallbackQuery, callback_data: dict):
-    post_id = int(callback_data["post_id"])
-    downloading_keyboard = types.InlineKeyboardMarkup()
-    downloading_keyboard.add(types.InlineKeyboardButton(text="Загрузка...", callback_data="None"))
-    try:
-        await query.message.edit_reply_markup(downloading_keyboard)
-        post = await olimpiada.get_post(post_id)
-        if post is None:
-            await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.insert(
-                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post_id)))
-            keyboard.insert(
-                types.InlineKeyboardButton("Страница новости",
-                                           web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
-            )
-            await query.message.edit_reply_markup(reply_markup=keyboard)
-            return
-        keyboard = types.InlineKeyboardMarkup()
-        keyboard.insert(
-            types.InlineKeyboardButton("Скрыть текст", callback_data=short_text_cb.new(post_id=post_id)))
-        keyboard.insert(
-            types.InlineKeyboardButton("Страница новости",
-                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
-        )
-        await query.message.edit_text(text=post.full_text(), reply_markup=keyboard)
-    except Exception as error:
-        logging.exception(error)
-        ping_admin()
-
-
-@dp.callback_query_handler(short_text_cb.filter())
-async def query_short_text(query: types.CallbackQuery, callback_data: dict):
-    post_id = int(callback_data["post_id"])
-    downloading_keyboard = types.InlineKeyboardMarkup()
-    downloading_keyboard.add(types.InlineKeyboardButton(text="Загрузка...", callback_data="None"))
-    try:
-        await query.message.edit_reply_markup(downloading_keyboard)
-        post = await olimpiada.get_post(post_id)
-        if post is None:
-            await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.insert(
-                types.InlineKeyboardButton("Скрыть текст", callback_data=short_text_cb.new(post_id=post_id)))
-            keyboard.insert(
-                types.InlineKeyboardButton("Страница новости",
-                                           web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
-            )
-            await query.message.edit_reply_markup(reply_markup=keyboard)
-            return
-        keyboard = types.InlineKeyboardMarkup()
-        if len(post.full_text()) < 4000:
-            keyboard.insert(
-                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post_id)))
-        keyboard.insert(
-            types.InlineKeyboardButton("Страница новости",
-                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
-        )
-        await query.message.edit_text(text=post.short_text(), reply_markup=keyboard)
-    except Exception as error:
-        logging.exception(error)
-        ping_admin()
-
-
-async def try_send(*args, **kwargs):
-    try:
-        await bot.send_message(*args, **kwargs)
-    except (BotBlocked, UserDeactivated, BotKicked):
-        if "chat_id" in kwargs:
-            user_id = kwargs["chat_id"]
-        else:
-            user_id = args[0]
-        database.run("DELETE FROM users WHERE user_id = %s" % user_id)
-    except Exception as error:
-        logging.exception(error)
-
-
 async def news():
     while True:
-        post_id = database.one("SELECT post_id FROM last_post")
+        post_id = database.get_last_post_id()
         post_id += 1
 
         try:
@@ -191,16 +295,18 @@ async def news():
             await asyncio.sleep(3600)
             continue
 
-        database.run("UPDATE last_post SET post_id = post_id + 1")
+        database.update_last_post_id()
 
         text = post.short_text()
-        keyboard = types.InlineKeyboardMarkup()
+        keyboard = InlineKeyboardBuilder()
         if len(post.full_text()) < 4000:
-            keyboard.insert(
-                types.InlineKeyboardButton("Показать текст", callback_data=full_text_cb.new(post_id=post_id)))
-        keyboard.insert(
-            types.InlineKeyboardButton("Страница новости",
-                                       web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id))
+            keyboard.button(
+                text="Показать текст",
+                callback_data=ViewFullText(post_id=post_id)
+            )
+        keyboard.button(
+            text="Страница новости",
+            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
         )
         for user_id in database.news_filter(post.olimp, post.tags):
             await try_send(user_id, text=text, reply_markup=keyboard)
@@ -271,7 +377,7 @@ async def events():
         text = None
         today = datetime.date.today()
         activity_id = event.activity_id
-        activity_name = database.one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % activity_id)
+        activity_name = database.get_activity_name(activity_id)
         event_name = event.event_name
         event_name = event_name[0].lower() + event_name[1:]
         if get_event_stage(event) != event.stage:
@@ -281,31 +387,56 @@ async def events():
                 continue
             else:
                 event.save()
-            weekdays = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
+            weekdays = ['понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу', 'воскресенье']
             if event.first_date is not None and event.first_date > today:
                 days = (event.first_date - today).days
                 weekday = weekdays[event.first_date.weekday()]
-                text = f"*{days_word(days)}* будет {event_name}, " \
-                       f"точнее *в {weekday} {event.first_date.strftime('%d.%m.%Y')}*.\n" \
-                       f"\n" \
-                       f"[{activity_name}](https://olimpiada.ru/activity/{activity_id})"
+                full_date = event.first_date.strftime("%d.%m.%Y")
+                text = Text(
+                    Bold(days_word(days)),
+                    " будет ",
+                    event_name,
+                    ", точнее ",
+                    Bold(
+                        "в ",
+                        weekday,
+                        " ",
+                        full_date,
+                    ),
+                    ".\n\n",
+                    TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+                ).as_markdown()
             elif event.second_date is not None and event.second_date > today:
                 days = (event.second_date - today).days
                 weekday = weekdays[event.second_date.weekday()]
-                text = f"*{days_word(days)}* закончится {event_name}, " \
-                       f"точнее *в {weekday} {event.second_date.strftime('%d.%m.%Y')}*.\n" \
-                       f"\n" \
-                       f"[{activity_name}](https://olimpiada.ru/activity/{activity_id})"
+                full_date = event.second_date.strftime('%d.%m.%Y')
+                text = Text(
+                    Bold(days_word(days)),
+                    " закончится ",
+                    event_name,
+                    ", точнее ",
+                    Bold(
+                        "в ",
+                        weekday,
+                        " ",
+                        full_date
+                    ),
+                    ".\n\n",
+                    TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+                ).as_markdown()
         if text is not None:
-            for user in database.notifications_filter(event.activity_id):
-                await try_send(user.user_id, text)
+            for user_id in database.notifications_filter(event.activity_id):
+                await try_send(user_id, text)
     await asyncio.sleep(3600)
 
 
+async def main() -> None:
+    await dp.start_polling(bot)
+
+
 if __name__ == "__main__":
-    logging.basicConfig(filename="log", filemode="w")
-    loop = asyncio.get_event_loop()
-    loop.create_task(news())
-    loop.create_task(events())
-    loop.create_task(olimpiada.collecting_events())
-    executor.start_polling(dp, skip_updates=True)
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    asyncio.run(main())
+    asyncio.run(news())
+    asyncio.run(events())
+    asyncio.run(olimpiada.collecting_events())

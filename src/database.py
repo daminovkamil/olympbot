@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from mysql.connector import connect
 from config import database_data
@@ -85,18 +87,18 @@ class User:
 
 
 def get_users_list():
-    data = all("SELECT user_id, data, settings FROM users")
     users = []
-    for user_id, data, settings in data:
+    for user_id, data, settings in all("SELECT user_id, data, settings FROM users"):
         users.append(User(user_id, data, settings))
     return users
 
 
 def notifications_filter(olympiad):
     result = []
-    for user in get_users_list():
-        if user.notifications_enabled and str(olympiad) in user.olympiads:
-            result.append(user.user_id)
+    query = "SELECT user_id FROM users WHERE JSON_EXTRACT(settings, \"$.notifications_enabled\") " \
+            "AND JSON_CONTAINS(JSON_EXTRACT(data, \"$.olympiads\"), '\"%s\"', \"$\")" % olympiad
+    for user_id in all(query):
+        result.append(user_id)
     return result
 
 
@@ -115,3 +117,15 @@ def news_filter(olympiads, subjects):
 
 def check_user_exist(user_id: int):
     return one("SELECT user_id FROM users WHERE user_id = %s" % user_id) is not None
+
+
+def get_activity_name(activity_id: int):
+    return one("SELECT activity_name FROM cool_olympiads WHERE activity_id = %s" % activity_id)
+
+
+def get_last_post_id():
+    return one("SELECT post_id FROM last_post")
+
+
+def update_last_post_id():
+    run("UPDATE last_post SET post_id = post_id + 1")
