@@ -107,7 +107,7 @@ async def cmd_start(message: Message):
         database.User(user_id)
         await message.answer(
             Text("Привет!").as_markdown(),
-            reply_markup=keyboard.as_markup()
+            reply_markup=keyboard.as_markup(resize_keyboard=True)
         )
         await message.answer(
             Text(
@@ -189,7 +189,7 @@ async def cmd_start(message: Message):
     else:
         await message.answer(
             Text("Привет!").as_markdown(),
-            reply_markup=keyboard.as_markup()
+            reply_markup=keyboard.as_markup(resize_keyboard=True)
         )
         await message.answer(
             Text("Данный неофициальный бот всё еще может помочь вам следить за олимпиадами)").as_markdown()
