@@ -226,7 +226,6 @@ async def query_full_text(query: CallbackQuery, callback_data: ViewFullText):
         web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
     )
     keyboard.adjust(2)
-    print(post.full_text())
     await query.message.edit_text(text=post.full_text(), reply_markup=keyboard.as_markup())
 
 
@@ -431,12 +430,14 @@ async def events():
 
 
 async def main() -> None:
-    await dp.start_polling(bot)
+    await asyncio.gather(
+        dp.start_polling(bot),
+        news(),
+        events(),
+        olimpiada.collecting_events(),
+    )
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     asyncio.run(main())
-    asyncio.run(news())
-    asyncio.run(events())
-    asyncio.run(olimpiada.collecting_events())
