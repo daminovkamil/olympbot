@@ -309,7 +309,7 @@ async def news():
             web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
         )
         for user_id in database.news_filter(post.olimp, post.tags):
-            await try_send(user_id, text=text, reply_markup=keyboard)
+            await try_send(user_id, text=text, reply_markup=keyboard.as_markup())
 
 
 def get_event_stage(event: olimpiada.Event):
