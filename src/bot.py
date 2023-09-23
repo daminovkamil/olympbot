@@ -432,7 +432,7 @@ async def events():
 async def main() -> None:
     await asyncio.gather(
         dp.start_polling(bot),
-        # news(),
+        news(),
         events(),
         olimpiada.collecting_events(),
     )
