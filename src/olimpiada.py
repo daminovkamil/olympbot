@@ -50,13 +50,13 @@ class Post:
         self.tags = tags if tags is not None else []
 
     def short_text(self):
-        result: str = f"[https://olimpiada.ru/news/%s](%s)" % (self.post_id, self.head)
+        result: str = f"[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
         result += "\n\n"
         result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
         return result
 
     def full_text(self):
-        result: str = f"[https://olimpiada.ru/news/%s](%s)" % (self.post_id, self.head)
+        result: str = f"[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
         result += "\n\n"
         result += self.text
         result += "\n\n"
