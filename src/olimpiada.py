@@ -50,13 +50,13 @@ class Post:
         self.tags = tags if tags is not None else []
 
     def short_text(self):
-        result: str = TextLink(self.head, url=f"https://olimpiada.ru/news/{self.post_id}").as_markdown()
+        result: str = f"[https://olimpiada.ru/news/%s](%s)" % (self.post_id, self.head)
         result += "\n\n"
         result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
         return result
 
     def full_text(self):
-        result: str = TextLink(self.head, url=f"https://olimpiada.ru/news/{self.post_id}").as_markdown()
+        result: str = f"[https://olimpiada.ru/news/%s](%s)" % (self.post_id, self.head)
         result += "\n\n"
         result += self.text
         result += "\n\n"
@@ -133,7 +133,7 @@ class Event:
         return not (self == other)
 
     def save(self):
-        database.run("DELETE FROM events WHERE event_id = %s AND activity_id = %s", (self.event_id, self.activity_id))
+        self.delete()
         database.run("INSERT INTO events (event_id, activity_id, event_name, first_date, second_date, stage) VALUES "
                      "(%s, %s, %s, %s, %s, %s)",
                      (self.event_id, self.activity_id, self.event_name, self.first_date, self.second_date, self.stage))
