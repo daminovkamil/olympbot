@@ -7,6 +7,7 @@ from datetime import *
 from aiogram.utils.formatting import Text, TextLink
 import database
 import markdownify
+import logging
 
 
 session = requests.Session()
@@ -234,10 +235,13 @@ async def load_event_from_db(event_id, activity_id):
 async def collecting_events():
     while True:
         for activity_id in database.all("SELECT activity_id FROM cool_olympiads"):
-            for event in await activity_events(activity_id):
-                if event != await load_event_from_db(event.event_id, event.activity_id):
-                    event.save()
-            await asyncio.sleep(10)
+            try:
+                for event in await activity_events(activity_id):
+                    if event != await load_event_from_db(event.event_id, event.activity_id):
+                        event.save()
+                await asyncio.sleep(5)
+            except Exception as error:
+                logging.error(error)
 
 
 async def user_events(user_id: int):
