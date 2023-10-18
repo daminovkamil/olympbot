@@ -424,6 +424,15 @@ def event_text(event: olimpiada.Event):
     return text
 
 
+def event_date(event: olimpiada.Event):
+    today = datetime.date.today()
+    if event.first_date is not None and event.first_date > today:
+        return event.first_date
+    elif event.second_date is not None and event.second_date > today:
+        return event.second_date
+    return today
+
+
 async def events():
     for event in await olimpiada.all_events():
         text = None
@@ -448,6 +457,7 @@ async def showing_events(message: Message):
 
     if user.olympiads:
         current_events: list[olimpiada.Event] = await olimpiada.user_events(user_id)
+        current_events.sort(key=lambda x: event_date(x))
         if current_events:
             await try_send(user_id, Text(
                 'Ниже представлены текущие события ваших избранных олимпиад'
