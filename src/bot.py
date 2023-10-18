@@ -58,32 +58,6 @@ async def query_error_handler(event: ErrorEvent, query: CallbackQuery):
     await query.answer("Возникла ошибка(( Обратитесь, пожалуйста, к разработчику", cache_time=20)
 
 
-@dp.message(F.web_app_data)
-async def getting_web_data(message: Message):
-    user_id = message.from_user.id
-    user = database.User(user_id)
-    web_app_data = message.web_app_data
-    if web_app_data.button_text == "Предметы":
-        data = json.loads(web_app_data.data)
-        user.subjects = data["subjects"]
-        user.save()
-    if web_app_data.button_text == "Олимпиады":
-        data = json.loads(web_app_data.data)
-        user.olympiads = data["olympiads"]
-        user.save()
-    if web_app_data.button_text == "Настройки":
-        data = json.loads(web_app_data.data)
-        user.news_enabled = data["news_enabled"]
-        user.subjects_filter = data["subjects_filter"]
-        user.olympiads_filter = data["olympiads_filter"]
-        user.notifications_enabled = data["notifications_enabled"]
-        user.save()
-    try:
-        await message.delete()
-    except Exception as error:
-        logging.error(error)
-
-
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     user_id = message.from_user.id
@@ -140,7 +114,7 @@ async def cmd_start(message: Message):
 
         await message.answer(post.short_text(), reply_markup=post_keyboard.as_markup())
         await message.answer(
-            Text("Также вам будут приходить уведомления. Например, такие:").as_markdown()
+            Text("Также вам будут приходить уведомления, если вы правильно настроите бота. Например, такие:").as_markdown()
         )
         await message.answer(
             Text(
@@ -194,6 +168,32 @@ async def cmd_start(message: Message):
         await message.answer(
             Text("Данный неофициальный бот всё еще может помочь вам следить за олимпиадами)").as_markdown()
         )
+
+
+@dp.message(F.web_app_data)
+async def getting_web_data(message: Message):
+    user_id = message.from_user.id
+    user = database.User(user_id)
+    web_app_data = message.web_app_data
+    if web_app_data.button_text == "Предметы":
+        data = json.loads(web_app_data.data)
+        user.subjects = data["subjects"]
+        user.save()
+    if web_app_data.button_text == "Олимпиады":
+        data = json.loads(web_app_data.data)
+        user.olympiads = data["olympiads"]
+        user.save()
+    if web_app_data.button_text == "Настройки":
+        data = json.loads(web_app_data.data)
+        user.news_enabled = data["news_enabled"]
+        user.subjects_filter = data["subjects_filter"]
+        user.olympiads_filter = data["olympiads_filter"]
+        user.notifications_enabled = data["notifications_enabled"]
+        user.save()
+    try:
+        await message.delete()
+    except Exception as error:
+        logging.error(error)
 
 
 @dp.callback_query(ViewFullText.filter())
@@ -371,14 +371,62 @@ def days_word(days):
     return "Через %s дней" % days
 
 
+def event_text(event: olimpiada.Event):
+    activity_id = event.activity_id
+
+    event_name = event.event_name
+    event_name = event_name[0].lower() + event_name[1:]
+
+    activity_name = database.get_activity_name(activity_id)
+
+    today = datetime.date.today()
+
+    weekdays = ['в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу', 'в воскресенье']
+
+    text = None
+
+    if event.first_date is not None and event.first_date > today:
+        days = (event.first_date - today).days
+        weekday = weekdays[event.first_date.weekday()]
+        full_date = event.first_date.strftime("%d.%m.%Y")
+        text = Text(
+            Bold(days_word(days)),
+            " будет ",
+            event_name,
+            ", точнее ",
+            Bold(
+                weekday,
+                " ",
+                full_date,
+            ),
+            ".\n\n",
+            TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+        ).as_markdown()
+
+    elif event.second_date is not None and event.second_date > today:
+        days = (event.second_date - today).days
+        weekday = weekdays[event.second_date.weekday()]
+        full_date = event.second_date.strftime('%d.%m.%Y')
+        text = Text(
+            Bold(days_word(days)),
+            " закончится ",
+            event_name,
+            ", точнее ",
+            Bold(
+                weekday,
+                " ",
+                full_date
+            ),
+            ".\n\n",
+            TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+        ).as_markdown()
+
+    return text
+
+
 async def events():
     for event in await olimpiada.all_events():
         text = None
-        today = datetime.date.today()
-        activity_id = event.activity_id
-        activity_name = database.get_activity_name(activity_id)
-        event_name = event.event_name
-        event_name = event_name[0].lower() + event_name[1:]
         if get_event_stage(event) != event.stage:
             event.stage = get_event_stage(event)
             if event.stage == 6:
@@ -386,47 +434,39 @@ async def events():
                 continue
             else:
                 event.save()
-            weekdays = ['понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу', 'воскресенье']
-            if event.first_date is not None and event.first_date > today:
-                days = (event.first_date - today).days
-                weekday = weekdays[event.first_date.weekday()]
-                full_date = event.first_date.strftime("%d.%m.%Y")
-                text = Text(
-                    Bold(days_word(days)),
-                    " будет ",
-                    event_name,
-                    ", точнее ",
-                    Bold(
-                        "в ",
-                        weekday,
-                        " ",
-                        full_date,
-                    ),
-                    ".\n\n",
-                    TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
-                ).as_markdown()
-            elif event.second_date is not None and event.second_date > today:
-                days = (event.second_date - today).days
-                weekday = weekdays[event.second_date.weekday()]
-                full_date = event.second_date.strftime('%d.%m.%Y')
-                text = Text(
-                    Bold(days_word(days)),
-                    " закончится ",
-                    event_name,
-                    ", точнее ",
-                    Bold(
-                        "в ",
-                        weekday,
-                        " ",
-                        full_date
-                    ),
-                    ".\n\n",
-                    TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
-                ).as_markdown()
+            text = event_text(event)
         if text is not None:
             for user_id in database.notifications_filter(event.activity_id):
                 await try_send(user_id, text)
     await asyncio.sleep(3600)
+
+
+@dp.message(Command('events'))
+async def showing_events(message: Message):
+    user_id = message.from_user.id
+    user = database.User(user_id)
+
+    if user.olympiads:
+        current_events: list[olimpiada.Event] = await olimpiada.user_events(user_id)
+        if current_events:
+            await try_send(user_id, Text(
+                'Ниже представлены текущие события ваших избранных олимпиад'
+            ).as_markdown())
+            for event in current_events:
+                if event_text(event) is not None:
+                    await try_send(user_id, event_text(event))
+        else:
+            await try_send(user_id, Text(
+                'На данный момент нет никаких событий('
+            ).as_markdown())
+    else:
+        await try_send(user_id, Text(
+            Bold('Вы не выбрали никаких олимпиад!'),
+            ' ',
+            'Если вы хотите получать уведомления, то, пожалуйста, используйте команду ',
+            '/start и выберите нужные олимпиады, нажав на кнопку по середине.'
+            ).as_markdown()
+        )
 
 
 async def main() -> None:

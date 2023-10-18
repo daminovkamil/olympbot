@@ -238,3 +238,14 @@ async def collecting_events():
                 if event != await load_event_from_db(event.event_id, event.activity_id):
                     event.save()
             await asyncio.sleep(10)
+
+
+async def user_events(user_id: int):
+    user = database.User(user_id=user_id)
+
+    result = []
+
+    for activity_id in user.olympiads:
+        result += await activity_events(activity_id)
+
+    return result
