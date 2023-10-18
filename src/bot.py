@@ -456,8 +456,10 @@ async def showing_events(message: Message):
     user = database.User(user_id)
 
     if user.olympiads:
-        current_events: list[olimpiada.Event] = await olimpiada.user_events(user_id)
-        current_events.sort(key=lambda x: event_date(x))
+        current_events: list[olimpiada.Event] = sorted(
+            await olimpiada.user_events(user_id),
+            key=lambda x: event_date(x)
+        )
         if current_events:
             await try_send(user_id, Text(
                 'Ниже представлены текущие события ваших избранных олимпиад'

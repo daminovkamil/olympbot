@@ -247,6 +247,6 @@ async def user_events(user_id: int):
 
     for activity_id in user.olympiads:
         for event_id in database.all("SELECT event_id FROM events WHERE activity_id = %s", (activity_id, )):
-            result.append(load_event_from_db(event_id, activity_id))
+            result.append(await load_event_from_db(event_id, activity_id))
 
     return result
