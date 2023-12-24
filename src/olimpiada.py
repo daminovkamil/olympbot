@@ -4,7 +4,7 @@ import asyncio
 import requests
 from bs4 import BeautifulSoup
 from datetime import *
-from aiogram.utils.formatting import Text, TextLink
+from aiogram.utils.formatting import Text, Bold, TextLink
 import database
 import markdownify
 import logging
@@ -132,6 +132,151 @@ class Event:
 
     def __ne__(self, other):
         return not (self == other)
+    
+    def get_date(self):
+        today = date.today()
+        if self.first_date is not None and self.first_date > today:
+            return self.first_date
+        elif self.second_date is not None and self.second_date > today:
+            return self.second_date
+        return today
+
+    def current_stage(self):
+        today = date.today()
+        if self.first_date is None:
+            # 0 - не надо присылать
+            # 3 - за неделю до конца
+            # 4 - за три дня до конца
+            # 5 - за день до конца
+            # 6 - удалить событие
+            days = (self.second_date - today).days
+            if days <= 0:
+                return 6
+            if days == 1:
+                return 5
+            if days <= 3:
+                return 4
+            if days <= 7:
+                return 3
+            return 0
+        else:
+            # 0 - не надо присылать
+            # 1 - за неделю до события
+            # 2 - за три дня до события
+            # 3 - за день до события
+            # 4 - за три дня до конца события (длина события хотя бы 4 дня)
+            # 5 - за день до конца
+            # 6 - удалить событие
+            days = (self.first_date - today).days
+            if days <= 0:
+                if self.second_date is None or (self.second_date - self.first_date).days < 5:
+                    return 6
+                days = (self.second_date - today).days
+                if days <= 0:
+                    return 6
+                if days == 1:
+                    return 5
+                if days <= 3:
+                    return 4
+                return 3
+            else:
+                if days == 1:
+                    return 3
+                if days <= 3:
+                    return 2
+                if days <= 7:
+                    return 1
+                return 0
+
+    def message_text(self):
+        def days_word(days):
+            if days == 1:
+                return "Завтра"
+            if days == 0:
+                return "Сегодня"
+            if days % 10 == 1 and days != 11:
+                return "Через %s день" % days
+            if days % 10 in [2, 3, 4] and days not in [12, 13, 14]:
+                return "Через %s дня" % days
+            return "Через %s дней" % days
+        
+        activity_id = self.activity_id
+
+        event_name = self.event_name
+        event_name = event_name[0].lower() + event_name[1:]
+
+        activity_name = database.get_activity_name(activity_id)
+
+        today = date.today()
+
+        weekdays = ['в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу', 'в воскресенье']
+        weekdays_second = ['до понедельника', 'до вторника', 'до среды', 'до четверга', 'до пятницы', 'до субботы', 'до воскресенья']
+
+        text = None
+
+        if self.first_date is not None and self.first_date > today:
+
+            if self.second_date is None:
+                days = (self.first_date - today).days
+                weekday = weekdays[self.first_date.weekday()]
+                full_date = self.first_date.strftime("%d.%m.%Y")
+                text = Text(
+                    Bold(days_word(days)),
+                    " будет ",
+                    event_name,
+                    ", точнее ",
+                    Bold(
+                        weekday,
+                        " ",
+                        full_date,
+                    ),
+                    ".\n\n",
+                    TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+                ).as_markdown()
+            else:
+                days = (self.first_date - today).days
+                weekday = weekdays[self.first_date.weekday()]
+                full_date = self.first_date.strftime("%d.%m.%Y")
+                text = Text(
+                    Bold(days_word(days)),
+                    " начнется ",
+                    event_name,
+                    ", точнее ",
+                    Bold(
+                        weekday,
+                        " ",
+                        full_date,
+                    ),
+                    ".\n\n",
+                    "Будет проводится ",
+                    Bold(
+                        weekdays_second[self.second_date.weekday()],
+                        " ",
+                        self.second_date.strftime("%d.%m.%Y")
+                    ),
+                    ".\n\n",
+                    TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+                ).as_markdown()
+
+        elif self.second_date is not None and self.second_date > today:
+            days = (self.second_date - today).days
+            weekday = weekdays[self.second_date.weekday()]
+            full_date = self.second_date.strftime('%d.%m.%Y')
+            text = Text(
+                Bold(days_word(days)),
+                " закончится ",
+                event_name,
+                ", точнее ",
+                Bold(
+                    weekday,
+                    " ",
+                    full_date
+                ),
+                ".\n\n",
+                TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
+            ).as_markdown()
+
+        return text
 
     def save(self):
         self.delete()

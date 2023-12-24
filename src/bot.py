@@ -311,139 +311,17 @@ async def news():
             await try_send(user_id, text=text, reply_markup=keyboard.as_markup())
 
 
-def get_event_stage(event: olimpiada.Event):
-    today = datetime.date.today()
-    if event.first_date is None:
-        # 0 - не надо присылать
-        # 3 - за неделю до конца
-        # 4 - за три дня до конца
-        # 5 - за день до конца
-        # 6 - удалить событие
-        days = (event.second_date - today).days
-        if days <= 0:
-            return 6
-        if days == 1:
-            return 5
-        if days <= 3:
-            return 4
-        if days <= 7:
-            return 3
-        return 0
-    else:
-        # 0 - не надо присылать
-        # 1 - за неделю до события
-        # 2 - за три дня до события
-        # 3 - за день до события
-        # 4 - за три дня до конца события (длина события хотя бы 4 дня)
-        # 5 - за день до конца
-        # 6 - удалить событие
-        days = (event.first_date - today).days
-        if days <= 0:
-            if event.second_date is None or (event.second_date - event.first_date).days < 5:
-                return 6
-            days = (event.second_date - today).days
-            if days <= 0:
-                return 6
-            if days == 1:
-                return 5
-            if days <= 3:
-                return 4
-            return 3
-        else:
-            if days == 1:
-                return 3
-            if days <= 3:
-                return 2
-            if days <= 7:
-                return 1
-            return 0
-
-
-def days_word(days):
-    if days == 1:
-        return "Завтра"
-    if days == 0:
-        return "Сегодня"
-    if days % 10 == 1 and days != 11:
-        return "Через %s день" % days
-    if days % 10 in [2, 3, 4] and days not in [12, 13, 14]:
-        return "Через %s дня" % days
-    return "Через %s дней" % days
-
-
-def event_text(event: olimpiada.Event):
-    activity_id = event.activity_id
-
-    event_name = event.event_name
-    event_name = event_name[0].lower() + event_name[1:]
-
-    activity_name = database.get_activity_name(activity_id)
-
-    today = datetime.date.today()
-
-    weekdays = ['в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу', 'в воскресенье']
-
-    text = None
-
-    if event.first_date is not None and event.first_date > today:
-        days = (event.first_date - today).days
-        weekday = weekdays[event.first_date.weekday()]
-        full_date = event.first_date.strftime("%d.%m.%Y")
-        text = Text(
-            Bold(days_word(days)),
-            " будет ",
-            event_name,
-            ", точнее ",
-            Bold(
-                weekday,
-                " ",
-                full_date,
-            ),
-            ".\n\n",
-            TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
-        ).as_markdown()
-
-    elif event.second_date is not None and event.second_date > today:
-        days = (event.second_date - today).days
-        weekday = weekdays[event.second_date.weekday()]
-        full_date = event.second_date.strftime('%d.%m.%Y')
-        text = Text(
-            Bold(days_word(days)),
-            " закончится ",
-            event_name,
-            ", точнее ",
-            Bold(
-                weekday,
-                " ",
-                full_date
-            ),
-            ".\n\n",
-            TextLink(activity_name, url="https://olimpiada.ru/activity/%s" % activity_id)
-        ).as_markdown()
-
-    return text
-
-
-def event_date(event: olimpiada.Event):
-    today = datetime.date.today()
-    if event.first_date is not None and event.first_date > today:
-        return event.first_date
-    elif event.second_date is not None and event.second_date > today:
-        return event.second_date
-    return today
-
-
 async def events():
     for event in await olimpiada.all_events():
         text = None
-        if get_event_stage(event) != event.stage:
-            event.stage = get_event_stage(event)
+        if event.current_stage() != event.stage:
+            event.stage = event.current_stage()
             if event.stage == 6:
                 event.delete()
                 continue
             else:
                 event.save()
-            text = event_text(event)
+            text = event.message_text()
         if text is not None:
             for user_id in database.notifications_filter(event.activity_id):
                 await try_send(user_id, text)
@@ -458,15 +336,15 @@ async def showing_events(message: Message):
     if user.olympiads:
         current_events: list[olimpiada.Event] = sorted(
             await olimpiada.user_events(user_id),
-            key=lambda x: event_date(x)
+            key=lambda x: x.get_date()
         )
         if current_events:
             await try_send(user_id, Text(
                 'Ниже представлены текущие события ваших избранных олимпиад'
             ).as_markdown())
             for event in current_events:
-                if event_text(event) is not None:
-                    await try_send(user_id, event_text(event))
+                if event.message_text is not None:
+                    await try_send(user_id, event.message_text())
         else:
             await try_send(user_id, Text(
                 'На данный момент нет никаких событий('
