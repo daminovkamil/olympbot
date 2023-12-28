@@ -65,15 +65,15 @@ async def cmd_start(message: Message):
     keyboard = ReplyKeyboardBuilder()
     keyboard.button(
         text="Предметы",
-        web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/subjects/%s" % user_id)
+        web_app=WebAppInfo(url="https://kdaminov.ru/olympbot/subjects/%s" % user_id)
     )
     keyboard.button(
         text="Олимпиады",
-        web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/olympiads/%s" % user_id)
+        web_app=WebAppInfo(url="https://kdaminov.ru/olympbot/olympiads/%s" % user_id)
     )
     keyboard.button(
         text="Настройки",
-        web_app=WebAppInfo(url="https://olympbot.kdaminov.ru/settings/%s" % user_id)
+        web_app=WebAppInfo(url="https://kdaminov.ru/olympbot/settings/%s" % user_id)
     )
     keyboard.adjust(3)
 
