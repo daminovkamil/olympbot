@@ -107,7 +107,12 @@ async def get_post(post_id: int):
     for olimp_for_news in right_part.find_all("div", class_="olimp_for_news"):
         href = olimp_for_news.find("a")["href"]
         activity_id = int(href[len("/activity/"):])
-        result.olimp.append(activity_id)
+        activity_data = database.one("SELECT data FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
+        if activity_data["top_level"]:
+            for child_id in activity_data["children"]:
+                result.olimp.append(child_id)
+        else:
+            result.olimp.append(activity_id)
 
     return result
 
@@ -194,9 +199,9 @@ class Event:
                 return "Завтра"
             if days == 0:
                 return "Сегодня"
-            if days % 10 == 1 and days != 11:
+            if days % 10 == 1 and days % 100 != 11:
                 return "Через %s день" % days
-            if days % 10 in [2, 3, 4] and days not in [12, 13, 14]:
+            if days % 10 in [2, 3, 4] and days % 100 not in [12, 13, 14]:
                 return "Через %s дня" % days
             return "Через %s дней" % days
         
