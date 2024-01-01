@@ -4,7 +4,7 @@ from aiogram.types.web_app_info import WebAppInfo
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.formatting import Text, Bold, TextLink
 from aiogram.enums import ParseMode
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 from aiogram.filters import Command
 from aiogram import Bot, F
@@ -62,26 +62,10 @@ async def query_error_handler(event: ErrorEvent, query: CallbackQuery):
 async def cmd_start(message: Message):
     user_id = message.from_user.id
 
-    keyboard = ReplyKeyboardBuilder()
-    keyboard.button(
-        text="Предметы",
-        web_app=WebAppInfo(url="https://kdaminov.ru/olympbot/subjects/%s" % user_id)
-    )
-    keyboard.button(
-        text="Олимпиады",
-        web_app=WebAppInfo(url="https://kdaminov.ru/olympbot/olympiads/%s" % user_id)
-    )
-    keyboard.button(
-        text="Настройки",
-        web_app=WebAppInfo(url="https://kdaminov.ru/olympbot/settings/%s" % user_id)
-    )
-    keyboard.adjust(3)
-
     if not database.check_user_exist(user_id):
         database.User(user_id)
         await message.answer(
-            Text("Привет!").as_markdown(),
-            reply_markup=keyboard.as_markup(resize_keyboard=True)
+            Text("Привет!").as_markdown()
         )
         await message.answer(
             Text(
@@ -163,7 +147,6 @@ async def cmd_start(message: Message):
     else:
         await message.answer(
             Text("Привет!").as_markdown(),
-            reply_markup=keyboard.as_markup(resize_keyboard=True)
         )
         await message.answer(
             Text("Данный неофициальный бот всё еще может помочь вам следить за олимпиадами)").as_markdown()
