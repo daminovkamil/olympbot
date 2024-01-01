@@ -129,7 +129,7 @@ async def cmd_start(message: Message):
             ).as_markdown()
         )
         await message.answer(
-            Text("‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопки около клавиатуры.").as_markdown()
+            Text("‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопку «Настройки» около клавиатуры.").as_markdown()
         )
         await message.answer(
             Text(
