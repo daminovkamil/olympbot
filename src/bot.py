@@ -9,13 +9,11 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.filters import Command
 from aiogram import Bot, F
 
-import json
 import database
 import olimpiada
 import config
 import asyncio
 import logging
-import datetime
 import requests
 import sys
 
@@ -98,7 +96,8 @@ async def cmd_start(message: Message):
 
         await message.answer(post.short_text(), reply_markup=post_keyboard.as_markup())
         await message.answer(
-            Text("Также вам будут приходить уведомления, если вы правильно настроите бота. Например, такие:").as_markdown()
+            Text(
+                "Также вам будут приходить уведомления, если вы правильно настроите бота. Например, такие:").as_markdown()
         )
         await message.answer(
             Text(
@@ -129,7 +128,8 @@ async def cmd_start(message: Message):
             ).as_markdown()
         )
         await message.answer(
-            Text("‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопку «Настройки» около клавиатуры.").as_markdown()
+            Text(
+                "‼️ Пожалуйста, настройте бота, как вам нравится, используя кнопку «Настройки» около клавиатуры.").as_markdown()
         )
         await message.answer(
             Text(
@@ -151,32 +151,6 @@ async def cmd_start(message: Message):
         await message.answer(
             Text("Данный неофициальный бот всё еще может помочь вам следить за олимпиадами)").as_markdown()
         )
-
-
-@dp.message(F.web_app_data)
-async def getting_web_data(message: Message):
-    user_id = message.from_user.id
-    user = database.User(user_id)
-    web_app_data = message.web_app_data
-    if web_app_data.button_text == "Предметы":
-        data = json.loads(web_app_data.data)
-        user.subjects = data["subjects"]
-        user.save()
-    if web_app_data.button_text == "Олимпиады":
-        data = json.loads(web_app_data.data)
-        user.olympiads = data["olympiads"]
-        user.save()
-    if web_app_data.button_text == "Настройки":
-        data = json.loads(web_app_data.data)
-        user.news_enabled = data["news_enabled"]
-        user.subjects_filter = data["subjects_filter"]
-        user.olympiads_filter = data["olympiads_filter"]
-        user.notifications_enabled = data["notifications_enabled"]
-        user.save()
-    try:
-        await message.delete()
-    except Exception as error:
-        logging.error(error)
 
 
 @dp.callback_query(ViewFullText.filter())
@@ -338,8 +312,8 @@ async def showing_events(message: Message):
             ' ',
             'Если вы хотите получать уведомления, то, пожалуйста, используйте команду ',
             '/start и выберите нужные олимпиады, нажав на кнопку по середине.'
-            ).as_markdown()
-        )
+        ).as_markdown()
+                       )
 
 
 async def main() -> None:
