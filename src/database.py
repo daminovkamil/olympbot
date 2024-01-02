@@ -71,6 +71,8 @@ class User:
             self.notifications_enabled = settings["notifications_enabled"]
             self.news_enabled = settings["news_enabled"]
 
+        self.olympiads = [str(olympiad) for olympiad in self.olympiads]
+
     def save(self):
         data = json.dumps({
             "subjects": self.subjects,
@@ -94,11 +96,11 @@ def get_users_list():
 
 
 def notifications_filter(olympiad):
+    olympiad = str(olympiad)
     result = []
-    query = "SELECT user_id FROM users WHERE JSON_EXTRACT(settings, \"$.notifications_enabled\") " \
-            "AND JSON_CONTAINS(JSON_EXTRACT(data, \"$.olympiads\"), '\"%s\"', \"$\")" % olympiad
-    for user_id in all(query):
-        result.append(user_id)
+    for user in get_users_list():
+        if user.notifications_enabled and olympiad in user.olympiads:
+            result.append(user.user_id)
     return result
 
 
