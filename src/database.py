@@ -109,7 +109,7 @@ def news_filter(olympiads, subjects):
     for user in get_users_list():
         first_condition = user.news_enabled
         second_condition = not user.olympiads_filter or len(olympiads) == 0 or len(olympiads & set(user.olympiads)) != 0
-        third_condition = not user.subjects_filter or len(subjects & set(user.subjects)) != 0
+        third_condition = not user.subjects_filter or len(subjects) == 0 or len(subjects & set(user.subjects)) != 0
         if first_condition and second_condition and third_condition:
             result.append(user.user_id)
     return result
