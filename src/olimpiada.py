@@ -53,16 +53,18 @@ class Post:
 
     def short_text(self):
         result: str = f"[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
-        result += "\n\n"
-        result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
+        if self.tags:
+            result += "\n\n"
+            result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
         return result
 
     def full_text(self):
         result: str = f"[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
         result += "\n\n"
         result += self.text
-        result += "\n\n"
-        result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
+        if self.tags:
+            result += "\n\n"
+            result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
         return result
 
 
