@@ -109,10 +109,11 @@ async def get_post(post_id: int):
         href = olimp_for_news.find("a")["href"]
         activity_id = int(href[len("/activity/"):])
         activity_data = database.one("SELECT data FROM cool_olympiads WHERE activity_id = %s", (activity_id,))
-        activity_data = json.loads(activity_data)
-        if activity_data["top_level"]:
-            for child_id in activity_data["children"]:
-                result.olimp.append(child_id)
+        if activity_data is not None:
+            activity_data = json.loads(activity_data)
+            if activity_data["top_level"]:
+                for child_id in activity_data["children"]:
+                    result.olimp.append(child_id)
         else:
             result.olimp.append(activity_id)
 
