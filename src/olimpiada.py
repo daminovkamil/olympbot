@@ -114,8 +114,7 @@ async def get_post(post_id: int):
             if activity_data["top_level"]:
                 for child_id in activity_data["children"]:
                     result.olimp.append(child_id)
-        else:
-            result.olimp.append(activity_id)
+        result.olimp.append(activity_id)
 
     return result
 
