@@ -10,7 +10,6 @@ import database
 import markdownify
 import logging
 
-
 session = requests.Session()
 
 
@@ -72,7 +71,7 @@ async def get_post(post_id: int):
     """Получаем данные с какой-то новости на сайте olimpiada.ru"""
 
     url = "https://olimpiada.ru/news/%s/" % post_id
-    page_html = database.one("SELECT html FROM pages WHERE url = %s", (url, ))
+    page_html = database.one("SELECT html FROM pages WHERE url = %s", (url,))
 
     if page_html is None:
         page = await get_page(f"https://olimpiada.ru/news/{post_id}/")
@@ -141,7 +140,7 @@ class Event:
 
     def __ne__(self, other):
         return not (self == other)
-    
+
     def get_date(self):
         today = date.today()
         if self.first_date is not None and self.first_date > today:
@@ -208,7 +207,7 @@ class Event:
             if days % 10 in [2, 3, 4] and days % 100 not in [12, 13, 14]:
                 return "Через %s дня" % days
             return "Через %s дней" % days
-        
+
         activity_id = self.activity_id
 
         event_name = self.event_name
@@ -219,7 +218,8 @@ class Event:
         today = date.today()
 
         weekdays = ['в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу', 'в воскресенье']
-        weekdays_second = ['до понедельника', 'до вторника', 'до среды', 'до четверга', 'до пятницы', 'до субботы', 'до воскресенья']
+        weekdays_second = ['до понедельника', 'до вторника', 'до среды', 'до четверга', 'до пятницы', 'до субботы',
+                           'до воскресенья']
 
         text = None
 
@@ -379,9 +379,11 @@ async def all_events():
 
 
 async def load_event_from_db(event_id, activity_id):
-    result = database.one("SELECT * FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
+    result = database.one("SELECT event_id, activity_id, event_name, first_date, second_date, stage"
+                          " FROM events WHERE event_id = %s AND activity_id = %s", (event_id, activity_id))
     if result is None:
         return None
+
     event_id, activity_id, event_name, first_date, second_date, stage = result
     return Event(activity_id, event_id, event_name, first_date, second_date, stage)
 
@@ -404,7 +406,7 @@ async def user_events(user_id: int):
     result = []
 
     for activity_id in user.olympiads:
-        for event_id in database.all("SELECT event_id FROM events WHERE activity_id = %s", (activity_id, )):
+        for event_id in database.all("SELECT event_id FROM events WHERE activity_id = %s", (activity_id,)):
             result.append(await load_event_from_db(event_id, activity_id))
 
     return result
