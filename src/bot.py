@@ -1,3 +1,5 @@
+import random
+
 from aiogram import Dispatcher
 from aiogram.types import ErrorEvent
 from aiogram.types.web_app_info import WebAppInfo
@@ -248,7 +250,10 @@ async def news():
             continue
 
         if post is None:
-            await asyncio.sleep(3600)
+            if await olimpiada.get_post(post_id + random.randint(1, 5)) is not None:
+                database.update_last_post_id()
+            else:
+                await asyncio.sleep(3600)
             continue
 
         database.update_last_post_id()
