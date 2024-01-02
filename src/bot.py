@@ -250,13 +250,16 @@ async def news():
             continue
 
         if post is None:
-            def check():
+            async def check():
                 for delta in [1, 2, 3, 4, 5]:
-                    if olimpiada.get_post(post_id + delta) is not None:
-                        return True
+                    try:
+                        if await olimpiada.get_post(post_id + delta) is not None:
+                            return True
+                    finally:
+                        pass
                 return False
 
-            if check():
+            if await check():
                 database.update_last_post_id()
             else:
                 await asyncio.sleep(3600)
