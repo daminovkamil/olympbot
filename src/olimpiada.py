@@ -372,7 +372,7 @@ async def activity_events(activity_id):
 
 async def all_events():
     result = []
-    rows = database.all("SELECT * FROM events")
+    rows = database.all("SELECT event_id, activity_id, event_name, first_date, second_date, stage FROM events")
     for event_id, activity_id, event_name, first_date, second_date, stage in rows:
         result.append(Event(activity_id, event_id, event_name, first_date, second_date, stage))
     return result
