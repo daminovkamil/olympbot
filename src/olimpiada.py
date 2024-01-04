@@ -15,14 +15,82 @@ session = requests.Session()
 
 class MyConverter(markdownify.MarkdownConverter):
     def escape(self, text):
-        if not text:
+        if not text.strip():
             return ''
         return Text(text).as_markdown()
+
+    def convert_a(self, el, text, convert_as_inline):
+        prefix, suffix, text = markdownify.chomp(text)
+        if not text:
+            return ''
+        href = el.get('href')
+        if href and href[0] == '/':
+            href = 'https://olimpiada.ru' + href
+        title = el.get('title')
+        # For the replacement see #29: text nodes underscores are escaped
+        if (self.options['autolinks']
+                and text.replace(r'\_', '_') == href
+                and not title
+                and not self.options['default_title']):
+            # Shortcut syntax
+            return '<%s>' % href
+        if self.options['default_title'] and not title:
+            title = href
+        title_part = ' "%s"' % title.replace('"', r'\"') if title else ''
+        return '%s[%s](%s%s)%s' % (prefix, text, href, title_part, suffix) if href else text
+
+    def convert_hn(self, *args, **kwargs):
+        return ''
+
+    def convert_hr(self, *args, **kwargs):
+        return ''
+
+    def convert_li(self, el, text, convert_as_inline):
+        parent = el.parent
+        if parent is not None and parent.name == 'ol':
+            if parent.get("start"):
+                start = int(parent.get("start"))
+            else:
+                start = 1
+            bullet = '*%s\.*' % (start + parent.index(el))
+        else:
+            depth = -1
+            while el:
+                if el.name == 'ul':
+                    depth += 1
+                el = el.parent
+            bullets = self.options['bullets']
+            bullet = bullets[depth % len(bullets)]
+        return '%s %s\n' % (bullet, (text or '').strip())
+
+    def convert_img(self, el, text, convert_as_inline):
+        alt = el.attrs.get('alt', None) or 'Изображение'
+        src = el.attrs.get('src', None) or ''
+        title = el.attrs.get('title', None) or ''
+        title_part = ' "%s"' % title.replace('"', r'\"') if title else ''
+        if (convert_as_inline
+                and el.parent.name not in self.options['keep_inline_images_in']):
+            return alt
+
+        return '[%s](%s%s)' % (alt, src, title_part)
+
+    def convert_table(self, *args, **kwargs):
+        return Bold('В данном месте должна быть таблица, но показ таблиц не поддерживается. '
+                    'Для просмотра таблицы, перейдите на страницу данного поста.\n\n').as_markdown()
+
+    def convert_td(self, *args, **kwargs):
+        return ''
+
+    def convert_th(self, *args, **kwargs):
+        return ''
+
+    def convert_tr(self, *args, **kwargs):
+        return ''
 
 
 def md(html, **options):
     html = html.replace("\xa0", " ")
-    return MyConverter(**options, bullets='•').convert(html)
+    return MyConverter(**options, bullets=['•', '‣', '•']).convert(html)
 
 
 async def get_page(url: str):
@@ -46,25 +114,27 @@ class Post:
     def __init__(self, post_id=0, head="", text="", olimp=None, tags=None):
         self.post_id = post_id
         self.head = head
+
         self.text = text
         self.olimp = olimp if olimp is not None else []
         self.tags = tags if tags is not None else []
 
     def short_text(self):
-        result: str = f"[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
-        if self.tags:
-            result += "\n\n"
-            result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
-        return result
+        return "[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
 
     def full_text(self):
-        result: str = f"[%s](https://olimpiada.ru/news/%s)" % (self.head, self.post_id)
-        result += "\n\n"
-        result += self.text
+        result = "*%s*" % self.head
+
+        if self.text.strip():
+            result += "\n\n"
+            result += self.text.strip()
+
         if self.tags:
             result += "\n\n"
-            result += " ".join(["\#" + tag.replace(" ", "") for tag in self.tags])
-        return result
+            for tag in self.tags:
+                result += Text("#%s " % tag.replace(" ", "")).as_markdown()
+
+        return result.strip()
 
 
 async def get_post(post_id: int):
@@ -93,12 +163,7 @@ async def get_post(post_id: int):
 
     # пытаемся добыть основной текст
     full_text = left_part.find("div", class_="full_text")
-    text_parts = []
-
-    for elem in full_text.contents:
-        if elem.name in ["p", "ul", "ol"]:
-            text_parts.append(md(str(elem)).strip())
-    result.text = "\n\n".join(text_parts)
+    result.text = md(str(full_text))
 
     # пытаемся добыть теги
     for subject_tag in subject_tags.find_all("span", class_="subject_tag"):

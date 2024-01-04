@@ -155,37 +155,72 @@ async def cmd_start(message: Message):
         )
 
 
-@dp.callback_query(ViewFullText.filter())
-async def query_full_text(query: CallbackQuery, callback_data: ViewFullText):
-    post_id = callback_data.post_id
-    downloading_keyboard = InlineKeyboardBuilder()
-    downloading_keyboard.button(text="Загрузка...", callback_data="None")
-    await query.message.edit_reply_markup(reply_markup=downloading_keyboard.as_markup())
+async def get_post_short_message(post_id):
     post = await olimpiada.get_post(post_id)
+
     if post is None:
-        await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
-        keyboard = InlineKeyboardBuilder()
+        return None, None
+
+    keyboard = InlineKeyboardBuilder()
+
+    if post.text.strip() and len(post.full_text()) < 4000:
         keyboard.button(
             text="Показать текст",
             callback_data=ViewFullText(post_id=post_id)
         )
-        keyboard.button(
-            text="Страница новости",
-            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
-        )
-        await query.message.edit_reply_markup(reply_markup=keyboard.as_markup())
-        return
-    keyboard = InlineKeyboardBuilder()
-    keyboard.button(
-        text="Скрыть текст",
-        callback_data=ViewShortText(post_id=post_id)
-    )
+
     keyboard.button(
         text="Страница новости",
         web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
     )
+
     keyboard.adjust(2)
-    await query.message.edit_text(text=post.full_text(), reply_markup=keyboard.as_markup())
+
+    return post.short_text(), keyboard.as_markup()
+
+
+async def get_post_full_message(post_id):
+    post = await olimpiada.get_post(post_id)
+
+    if post is None:
+        return None, None
+
+    keyboard = InlineKeyboardBuilder()
+
+    keyboard.button(
+        text="Скрыть текст",
+        callback_data=ViewShortText(post_id=post_id)
+    )
+
+    keyboard.button(
+        text="Страница новости",
+        web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
+    )
+
+    keyboard.adjust(2)
+
+    return post.full_text(), keyboard.as_markup()
+
+
+@dp.callback_query(ViewFullText.filter())
+async def query_full_text(query: CallbackQuery, callback_data: ViewFullText):
+    post_id = callback_data.post_id
+
+    downloading_keyboard = InlineKeyboardBuilder()
+    downloading_keyboard.button(text="Загрузка...", callback_data="None")
+
+    previous_markup = query.message.reply_markup
+
+    await query.message.edit_reply_markup(reply_markup=downloading_keyboard.as_markup())
+
+    text, markup = await get_post_full_message(post_id)
+
+    if text is None:
+        await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
+        await query.message.edit_reply_markup(reply_markup=previous_markup)
+        return
+
+    await query.message.edit_text(text=text, reply_markup=markup)
 
 
 @dp.callback_query(ViewShortText.filter())
@@ -193,41 +228,20 @@ async def query_short_text(query: CallbackQuery, callback_data: ViewShortText):
     post_id = callback_data.post_id
 
     downloading_keyboard = InlineKeyboardBuilder()
-    downloading_keyboard.button(
-        text="Загрузка...",
-        callback_data="None"
-    )
+    downloading_keyboard.button(text="Загрузка...", callback_data="None")
 
-    await query.message.edit_reply_markup(
-        reply_markup=downloading_keyboard.as_markup()
-    )
+    previous_markup = query.message.reply_markup
 
-    post = await olimpiada.get_post(post_id)
-    if post is None:
+    await query.message.edit_reply_markup(reply_markup=downloading_keyboard.as_markup())
+
+    text, markup = await get_post_short_message(post_id)
+
+    if text is None:
         await query.answer("Не получилось( Попробуйте, пожалуйста, позже")
-        keyboard = InlineKeyboardBuilder()
-        keyboard.button(
-            text="Скрыть текст",
-            callback_data=ViewShortText(post_id=post_id)
-        )
-        keyboard.button(
-            text="Страница новости",
-            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
-        )
-        await query.message.edit_reply_markup(reply_markup=keyboard.as_markup())
+        await query.message.edit_reply_markup(reply_markup=previous_markup)
         return
-    keyboard = InlineKeyboardBuilder()
-    if len(post.full_text()) < 4000:
-        keyboard.button(
-            text="Показать текст",
-            callback_data=ViewFullText(post_id=post_id)
-        )
-    keyboard.button(
-        text="Страница новости",
-        web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
-    )
-    keyboard.adjust(2)
-    await query.message.edit_text(text=post.short_text(), reply_markup=keyboard.as_markup())
+
+    await query.message.edit_text(text=text, reply_markup=markup)
 
 
 def ping_admin(text="Советую посмотреть логи) У кого-то что-то сломалось"):
@@ -267,19 +281,10 @@ async def news():
 
         database.update_last_post_id()
 
-        text = post.short_text()
-        keyboard = InlineKeyboardBuilder()
-        if len(post.full_text()) < 4000:
-            keyboard.button(
-                text="Показать текст",
-                callback_data=ViewFullText(post_id=post_id)
-            )
-        keyboard.button(
-            text="Страница новости",
-            web_app=WebAppInfo(url="https://olimpiada.ru/news/%s" % post_id)
-        )
+        text, markup = await get_post_short_message(post_id)
+
         for user_id in database.news_filter(post.olimp, post.tags):
-            await try_send(user_id, text=text, reply_markup=keyboard.as_markup())
+            await try_send(user_id, text=text, reply_markup=markup)
 
 
 async def events():
@@ -324,8 +329,7 @@ async def showing_events(message: Message):
         await try_send(user_id, Text(
             Bold('Вы не выбрали никаких олимпиад!'),
             ' ',
-            'Если вы хотите получать уведомления, то, пожалуйста, используйте команду ',
-            '/start и выберите нужные олимпиады, нажав на кнопку по середине.'
+            'Если вы хотите получать уведомления, то, пожалуйста, используйте кнопку «Настройки» около клавиатуры.'
         ).as_markdown()
                        )
 
