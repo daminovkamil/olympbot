@@ -207,7 +207,7 @@ async def query_full_text(query: CallbackQuery, callback_data: ViewFullText):
     post_id = callback_data.post_id
 
     downloading_keyboard = InlineKeyboardBuilder()
-    downloading_keyboard.button(text="Загрузка...", callback_data="None")
+    downloading_keyboard.button(text="Загрузка...", callback_data=ViewShortText(post_id=post_id))
 
     previous_markup = query.message.reply_markup
 
@@ -228,7 +228,7 @@ async def query_short_text(query: CallbackQuery, callback_data: ViewShortText):
     post_id = callback_data.post_id
 
     downloading_keyboard = InlineKeyboardBuilder()
-    downloading_keyboard.button(text="Загрузка...", callback_data="None")
+    downloading_keyboard.button(text="Загрузка...", callback_data=ViewShortText(post_id=post_id))
 
     previous_markup = query.message.reply_markup
 
