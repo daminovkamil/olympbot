@@ -268,7 +268,7 @@ async def cmd_events(message: Message):
     if not user.notifications_enabled:
         await try_send(user_id, messages.EVENTS_TURNED_OFF_MD)
     elif user.activities:
-        events = await database.users.get_events(user)
+        events = list(await database.users.get_events(user))
         if events:
             await try_send(user_id, messages.EVENTS_YOURS_EVENTS_BELOW_MD)
             for event in events:
