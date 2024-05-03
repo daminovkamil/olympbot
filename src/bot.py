@@ -223,7 +223,7 @@ async def news():
 async def sending_events():
     while True:
         if datetime.datetime.utcnow().hour < 7:
-            continue
+            await asyncio.sleep(3600)
 
         async with database.connection.async_session() as session:
 
@@ -291,7 +291,7 @@ async def main() -> None:
         dp.start_polling(bot),
         news(),
         sending_events(),
-        collecting_events(),
+        # collecting_events(),
     )
 
 
