@@ -185,66 +185,77 @@ def ping_admin(text="Советую посмотреть логи) У кого-�
 
 async def news():
     while True:
-        post_id = await database.posts.get_last_post_id()
-        post_id += 1
-
         try:
-            post = await parsing.get_post(post_id)
-        except Exception as error:
-            logging.exception(error)
-            ping_admin(f"Какая-то проблема с получением новости {post_id}")
-            await asyncio.sleep(3600)
-            continue
+            post_id = await database.posts.get_last_post_id()
+            post_id += 1
 
-        if post is None:
-            async def check():
-                for delta in [1, 2, 3, 4, 5]:
-                    try:
-                        if await parsing.get_post(post_id + delta) is not None:
-                            return True
-                    finally:
-                        pass
-                return False
-
-            if await check():
-                await database.posts.update_last_post_id(post_id + 1)
-            else:
+            try:
+                post = await parsing.get_post(post_id)
+            except Exception as error:
+                logging.exception(error)
+                ping_admin(f"Какая-то проблема с получением новости {post_id}")
                 await asyncio.sleep(3600)
-            continue
+                continue
 
-        await database.posts.update_last_post_id(post_id + 1)
+            if post is None:
+                async def check():
+                    for delta in [1, 2, 3, 4, 5]:
+                        try:
+                            if await parsing.get_post(post_id + delta) is not None:
+                                return True
+                        finally:
+                            pass
+                    return False
 
-        text, markup = await get_post_short_message(post_id)
+                if await check():
+                    await database.posts.update_last_post_id(post_id + 1)
+                else:
+                    await asyncio.sleep(3600)
+                continue
 
-        for user in await database.users.news_filter(post):
-            await try_send(user.id, text=text, reply_markup=markup)
+            await database.posts.update_last_post_id(post_id + 1)
+
+            text, markup = await get_post_short_message(post_id)
+
+            for user in await database.users.news_filter(post):
+                await try_send(user.id, text=text, reply_markup=markup)
+        except Exception as error:
+            ping_admin("Ошибка в news()")
+            ping_admin(str(error))
+            logging.critical(error)
+            await asyncio.sleep(3600)
 
 
 async def sending_events():
     while True:
-        if datetime.datetime.utcnow().hour < 7:
-            await asyncio.sleep(3600)
+        try:
+            if datetime.datetime.utcnow().hour < 7:
+                await asyncio.sleep(3600)
 
-        async with database.connection.async_session() as session:
+            async with database.connection.async_session() as session:
 
-            result = await session.execute(
-                select(database.models.EventScheduler).filter(
-                    database.models.EventScheduler.date <= func.now()
+                result = await session.execute(
+                    select(database.models.EventScheduler).filter(
+                        database.models.EventScheduler.date <= func.now()
+                    )
                 )
-            )
 
-            result = result.scalars()
+                result = result.scalars()
 
-            for event_scheduler in result:
-                event = await database.events.get_event(id=event_scheduler.event_id)
+                for event_scheduler in result:
+                    event = await database.events.get_event(id=event_scheduler.event_id)
 
-                text = await messages.event_text(event)
+                    text = await messages.event_text(event)
 
-                for user in await database.users.event_filter(event):
-                    await try_send(user.id, text=text)
+                    for user in await database.users.event_filter(event):
+                        await try_send(user.id, text=text)
 
-                await session.delete(event_scheduler)
-                await session.commit()
+                    await session.delete(event_scheduler)
+                    await session.commit()
+        except Exception as error:
+            ping_admin("Ошибка в sending_events()")
+            ping_admin(str(error))
+            logging.critical(error)
 
         await asyncio.sleep(3600 * 3)
 
@@ -271,19 +282,25 @@ async def cmd_events(message: Message):
 
 async def collecting_events():
     while True:
-        for activity in await database.activities.all_activities():
-            for event in await parsing.activity_events(activity_id=activity.id):
-                db_event = await database.events.get_event(event_id=event.event_id, activity_id=event.activity_id)
-                if db_event is None:
-                    await database.events.save_event(event)
-                else:
-                    event_tup = (event.name, event.first_date, event.second_date)
-                    db_event_tup = (db_event.name, db_event.first_date, db_event.second_date)
-                    if event_tup != db_event_tup:
-                        await database.events.delete_event(event_id=event.event_id, activity_id=event.activity_id)
+        try:
+            for activity in await database.activities.all_activities():
+                for event in await parsing.activity_events(activity_id=activity.id):
+                    db_event = await database.events.get_event(event_id=event.event_id, activity_id=event.activity_id)
+                    if db_event is None:
                         await database.events.save_event(event)
-                await asyncio.sleep(60)
-        await asyncio.sleep(3600 * 5)
+                    else:
+                        event_tup = (event.name, event.first_date, event.second_date)
+                        db_event_tup = (db_event.name, db_event.first_date, db_event.second_date)
+                        if event_tup != db_event_tup:
+                            await database.events.delete_event(event_id=event.event_id, activity_id=event.activity_id)
+                            await database.events.save_event(event)
+                    await asyncio.sleep(60)
+            await asyncio.sleep(3600 * 5)
+        except Exception as error:
+            ping_admin("Ошибка в collecting_events()")
+            ping_admin(str(error))
+            logging.critical(error)
+            await asyncio.sleep(3600)
 
 
 async def main() -> None:
@@ -291,7 +308,7 @@ async def main() -> None:
         dp.start_polling(bot),
         news(),
         sending_events(),
-        # collecting_events(),
+        collecting_events(),
     )
 
 

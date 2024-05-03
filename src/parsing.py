@@ -5,9 +5,9 @@ import datetime
 from aiogram.utils.formatting import Text, Bold
 import markdownify
 
+from typing import Set
 from dataclasses import dataclass, field
 from database.models import Subject, Activity, PageArchive, Event
-from typing import Set
 from database.connection import async_session
 from sqlalchemy import select
 
