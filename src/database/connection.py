@@ -14,8 +14,7 @@ db_url = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
 
 engine = create_async_engine(
     db_url,
-    pool_timeout=30,
-    pool_recycle=1800,
+    pool_pre_ping=True,
 )
 
 
