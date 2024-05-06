@@ -1,12 +1,13 @@
 from aiogram.utils.formatting import Text, Bold, TextLink
-from database.models import Activity
-from database.connection import async_session
+from sitedb.queries import activity_data
 from datetime import date
 
 ERROR_MESSAGE_PT = "Возникла ошибка(( Обратитесь, пожалуйста, к разработчику"
 ERROR_MESSAGE_MD = Text(ERROR_MESSAGE_PT).as_markdown()
 
 ERROR_TRY_AGAIN_PT = "Не получилось( Попробуйте, пожалуйста, позже"
+
+FUNCTION_TEMPORARILY_NOT_AVAILABLE_MD = Text("Функция временно не доступна((").as_markdown()
 
 BUTTON_DOWNLOAD_PT = "Загрузка"
 BUTTON_SHOW_TEXT_PT = "Показать текст"
@@ -48,8 +49,7 @@ async def event_text(event):
     event_name = event.name
     event_name = event_name[0].lower() + event_name[1:]
 
-    async with async_session() as session:
-        activity_name = (await session.get(Activity, activity_id)).name
+    activity_name = activity_data[activity_id]
 
     today = date.today()
 

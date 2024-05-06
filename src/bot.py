@@ -17,12 +17,11 @@ import requests
 import parsing
 import sys
 
-import database.posts
-import database.users
-import database.models
-import database.events
-import database.connection
-import database.activities
+import botdb.events
+import botdb.last_post
+import botdb.connection
+
+import sitedb.queries
 
 import messages
 
@@ -59,8 +58,7 @@ async def try_delete(*args, **kwargs):
 async def cmd_start(message: Message):
     user_id = message.from_user.id
 
-    if not await database.users.exists(user_id):
-        await database.users.create(user_id)
+    if sitedb.queries.touch_user(user_id):
         await message.answer(messages.CMD_START_NEW_USER_1_MD)
         await message.answer(messages.CMD_START_NEW_USER_2_MD)
         await message.answer(messages.CMD_START_NEW_USER_3_MD)
@@ -186,7 +184,7 @@ def ping_admin(text="Советую посмотреть логи) У кого-�
 async def news():
     while True:
         try:
-            post_id = await database.posts.get_last_post_id()
+            post_id = botdb.last_post.get()
             post_id += 1
 
             try:
@@ -208,17 +206,17 @@ async def news():
                     return False
 
                 if await check():
-                    await database.posts.update_last_post_id(post_id + 1)
+                    botdb.last_post.update(post_id + 1)
                 else:
                     await asyncio.sleep(3600)
                 continue
 
-            await database.posts.update_last_post_id(post_id + 1)
+            botdb.last_post.update(post_id + 1)
 
             text, markup = await get_post_short_message(post_id)
 
-            for user in await database.users.news_filter(post):
-                await try_send(user.id, text=text, reply_markup=markup)
+            for user_id in sitedb.queries.post_filter(activities=post.activities, subjects=post.subjects):
+                await try_send(user_id, text=text, reply_markup=markup)
         except Exception as error:
             ping_admin("Ошибка в news()")
             ping_admin(str(error))
@@ -231,27 +229,10 @@ async def sending_events():
         try:
             if datetime.datetime.utcnow().hour < 7:
                 await asyncio.sleep(3600)
-
-            async with database.connection.async_session() as session:
-
-                result = await session.execute(
-                    select(database.models.EventScheduler).filter(
-                        database.models.EventScheduler.date <= func.now()
-                    )
-                )
-
-                result = result.scalars()
-
-                for event_scheduler in result:
-                    event = await database.events.get_event(id=event_scheduler.event_id)
-
-                    text = await messages.event_text(event)
-
-                    for user in await database.users.event_filter(event):
-                        await try_send(user.id, text=text)
-
-                    await session.delete(event_scheduler)
-                    await session.commit()
+            for event in botdb.events.current_events():
+                for user_id in sitedb.queries.event_filter(event.activity_id):
+                    await try_send(user_id, text=messages.event_text(event))
+            botdb.events.delete_current()
         except Exception as error:
             ping_admin("Ошибка в sending_events()")
             ping_admin(str(error))
@@ -262,38 +243,40 @@ async def sending_events():
 
 @dp.message(Command('events'))
 async def cmd_events(message: Message):
-    user_id = message.from_user.id
-    user = await database.users.get(user_id)
-
-    if not user.notifications_enabled:
-        await try_send(user_id, messages.EVENTS_TURNED_OFF_MD)
-    elif user.activities:
-        events = list(await database.users.get_events(user))
-        if events:
-            await try_send(user_id, messages.EVENTS_YOURS_EVENTS_BELOW_MD)
-            for event in events:
-                text = await messages.event_text(event)
-                await try_send(user_id, text=text)
-        else:
-            await try_send(user_id, messages.EVENTS_EMPTY_MD)
-    else:
-        await try_send(user_id, messages.EVENTS_ACTIVITIES_NOT_CHOSEN_MD)
+    await message.answer(messages.FUNCTION_TEMPORARILY_NOT_AVAILABLE_MD)
+    # user_id = message.from_user.id
+    # user = await database.users.get(user_id)
+    #
+    # if not user.notifications_enabled:
+    #     await try_send(user_id, messages.EVENTS_TURNED_OFF_MD)
+    # elif user.activities:
+    #     events = list(await database.users.get_events(user))
+    #     if events:
+    #         await try_send(user_id, messages.EVENTS_YOURS_EVENTS_BELOW_MD)
+    #         for event in events:
+    #             text = await messages.event_text(event)
+    #             await try_send(user_id, text=text)
+    #     else:
+    #         await try_send(user_id, messages.EVENTS_EMPTY_MD)
+    # else:
+    #     await try_send(user_id, messages.EVENTS_ACTIVITIES_NOT_CHOSEN_MD)
 
 
 async def collecting_events():
     while True:
         try:
-            for activity in await database.activities.all_activities():
-                for event in await parsing.activity_events(activity_id=activity.id):
-                    db_event = await database.events.get_event(event_id=event.event_id, activity_id=event.activity_id)
+            for activity_id in sitedb.queries.activity_data.keys():
+                for event in await parsing.activity_events(activity_id=activity_id):
+                    event_id = event.event_id
+                    db_event = botdb.events.get_event(event_id=event_id, activity_id=activity_id)
                     if db_event is None:
-                        await database.events.save_event(event)
+                        botdb.events.save_event(event)
                     else:
                         event_tup = (event.name, event.first_date, event.second_date)
                         db_event_tup = (db_event.name, db_event.first_date, db_event.second_date)
                         if event_tup != db_event_tup:
-                            await database.events.delete_event(event_id=event.event_id, activity_id=event.activity_id)
-                            await database.events.save_event(event)
+                            botdb.events.delete_event(db_event.id)
+                            botdb.events.save_event(event)
                     await asyncio.sleep(60)
             await asyncio.sleep(3600 * 5)
         except Exception as error:
@@ -314,5 +297,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    asyncio.run(database.models.create_table())
+    botdb.connection.create_tables()
     asyncio.run(main())

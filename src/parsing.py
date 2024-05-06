@@ -7,9 +7,11 @@ import markdownify
 
 from typing import Set
 from dataclasses import dataclass, field
-from database.models import Subject, Activity, PageArchive, Event
-from database.connection import async_session
-from sqlalchemy import select
+
+import botdb.pages
+import botdb.events
+import sitedb.queries
+import logging
 
 request_session = requests.Session()
 
@@ -93,28 +95,30 @@ def md(html, **options):
 
 
 async def get_page(url: str):
-
     four_days_ago = datetime.datetime.now() - datetime.timedelta(days=4)
 
-    async with async_session() as database_session:
-        page = await database_session.get(PageArchive, url)
+    result = botdb.pages.get_page(url)
 
-        if page is not None and page.loaded < four_days_ago:
-            await database_session.delete(page)
-            await database_session.commit()
+    if result is not None:
+        page, loaded = result
+        if page is not None and loaded < four_days_ago:
+            botdb.pages.delete_page(url)
             page = None
+    else:
+        page = None
 
-        if page is not None:
-            return page.html
+    if page is not None:
+        return page
 
-        page = request_session.get(url)
+    page = request_session.get(url)
 
-        if page.ok and 'ddos' not in page.text.lower():
-            database_session.add(PageArchive(url=url, html=page.text))
-            await database_session.commit()
+    if page.ok:
+        if 'ddos' not in page.text.lower():
+            botdb.pages.add_page(url, page.text)
             return page.text
         else:
-            return None
+            logging.info("DDoS protection detected!")
+    return None
 
 
 @dataclass
@@ -122,8 +126,8 @@ class Post:
     id: int
     title: str
     text: str
-    activities: Set[Activity] = field(default_factory=set)
-    subjects: Set[Subject] = field(default_factory=set)
+    activities: Set[int] = field(default_factory=set)
+    subjects: Set[int] = field(default_factory=set)
 
     def short_text(self):
         return "[%s](https://olimpiada.ru/news/%s)" % (self.title, self.id)
@@ -137,8 +141,9 @@ class Post:
 
         if self.subjects:
             result += "\n\n"
-            for subject in self.subjects:
-                result += Text("#%s " % subject.name.replace(" ", "")).as_markdown()
+            for subject_id in self.subjects:
+                subject_name = sitedb.queries.subject_name_by_id[subject_id]
+                result += Text("#%s " % subject_name.replace(" ", "")).as_markdown()
 
         return result.strip()
 
@@ -165,27 +170,30 @@ async def get_post(post_id: int):
     full_text = left_part.find("div", class_="full_text")
     text = md(str(full_text))
 
-    async with async_session() as session:
-        # пытаемся добыть теги
-        subjects: Set[Subject] = set()
-        for subject_tag in subject_tags.find_all("span", class_="subject_tag"):
-            name = md(subject_tag.text[1:])
-            subject = (await session.execute(select(Subject).filter_by(name=name))).scalar_one()
-            subjects.add(subject)
+    # пытаемся добыть теги
+    subjects: Set[int] = set()
+    for subject_tag in subject_tags.find_all("span", class_="subject_tag"):
+        name = md(subject_tag.text[1:])
+        subjects.add(sitedb.queries.subjects_id_by_name[name])
 
-        # пытаемся добыть олимпиаду, которая связанна с постом
-        activities: Set[Activity] = set()
-        for olimp_for_news in right_part.find_all("div", class_="olimp_for_news"):
-            href = olimp_for_news.find("a")["href"]
-            activity_id = int(href[len("/activity/"):])
-            activity = await session.get(Activity, activity_id)
-            if activity is not None:
-                if activity.top_level:
-                    activities |= await activity.children
-                else:
-                    activities.add(activity)
+    # пытаемся добыть олимпиаду, которая связанна с постом
+    activities: Set[int] = set()
+    activity_data = sitedb.queries.activity_data
 
-        return Post(post_id, title, text, activities, subjects)
+    for olimp_for_news in right_part.find_all("div", class_="olimp_for_news"):
+        href = olimp_for_news.find("a")["href"]
+        activity_id = int(href[len("/activity/"):])
+        if activity_id in activity_data:
+            data = activity_data[activity_id]
+            if "top_level" in data and data["top_level"]:
+                if "children" in data:
+                    for child_id in data["children"]:
+                        activities.add(child_id)
+            else:
+                activities.add(activity_id)
+
+    return Post(post_id, title, text, activities, subjects)
+
 
 month_map = dict()
 month_map["янв"] = 1
@@ -256,7 +264,7 @@ async def activity_events(activity_id):
             first_date, second_date = datetime.date.today(), datetime.date.today()
         else:
             first_date, second_date = await get_date(date_string)
-        event = Event(
+        event = botdb.events.Event(
             event_id=event_id,
             activity_id=activity_id,
             name=event_name,
