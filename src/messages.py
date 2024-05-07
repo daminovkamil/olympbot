@@ -1,4 +1,4 @@
-from aiogram.utils.formatting import Text, Bold, TextLink
+from aiogram.utils.formatting import Text, Bold, TextLink, CustomEmoji
 from sitedb.queries import activity_data
 from datetime import date
 
@@ -49,7 +49,7 @@ async def event_text(event):
     event_name = event.name
     event_name = event_name[0].lower() + event_name[1:]
 
-    activity_name = activity_data[activity_id]
+    activity_name = activity_data[activity_id]["name"]
 
     today = date.today()
 
@@ -66,6 +66,7 @@ async def event_text(event):
             weekday = weekdays[event.first_date.weekday()]
             full_date = event.first_date.strftime("%d.%m.%Y")
             text = Text(
+                "‼️ ",
                 Bold(days_word(days)),
                 " будет ",
                 event_name,
@@ -83,6 +84,7 @@ async def event_text(event):
             weekday = weekdays[event.first_date.weekday()]
             full_date = event.first_date.strftime("%d.%m.%Y")
             text = Text(
+                "‼️ ",
                 Bold(days_word(days)),
                 " начнется ",
                 event_name,
@@ -108,6 +110,7 @@ async def event_text(event):
         weekday = weekdays[event.second_date.weekday()]
         full_date = event.second_date.strftime('%d.%m.%Y')
         text = Text(
+            "‼️ ",
             Bold(days_word(days)),
             " закончится ",
             event_name,

@@ -233,7 +233,8 @@ async def sending_events():
             for event in botdb.events.current_events():
                 for user_id in sitedb.queries.event_filter(event.activity_id):
                     logging.info(f"Sending {event} to <User(id={user_id})>...")
-                    await try_send(user_id, text=messages.event_text(event))
+                    text = await messages.event_text(event)
+                    await try_send(user_id, text=text)
             botdb.events.delete_current()
         except Exception as error:
             ping_admin("Ошибка в sending_events()")
