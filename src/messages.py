@@ -95,7 +95,7 @@ async def event_text(event):
                     full_date,
                 ),
                 ".\n\n",
-                "Будет проводится ",
+                "Будет проводиться ",
                 Bold(
                     weekdays_second[event.second_date.weekday()],
                     " ",
