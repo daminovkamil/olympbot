@@ -206,17 +206,18 @@ async def news():
                     return False
 
                 if await check():
-                    botdb.last_post.update(post_id + 1)
+                    botdb.last_post.update(post_id)
                 else:
                     await asyncio.sleep(3600)
                 continue
 
-            botdb.last_post.update(post_id + 1)
-
             text, markup = await get_post_short_message(post_id)
 
             for user_id in sitedb.queries.post_filter(activities=post.activities, subjects=post.subjects):
+                logging.info(f"Sending <Post(id={post_id})> to <User(id={user_id})>...")
                 await try_send(user_id, text=text, reply_markup=markup)
+
+            botdb.last_post.update(post_id)
         except Exception as error:
             ping_admin("Ошибка в news()")
             ping_admin(str(error))
@@ -231,6 +232,7 @@ async def sending_events():
                 await asyncio.sleep(3600)
             for event in botdb.events.current_events():
                 for user_id in sitedb.queries.event_filter(event.activity_id):
+                    logging.info(f"Sending {event} to <User(id={user_id})>...")
                     await try_send(user_id, text=messages.event_text(event))
             botdb.events.delete_current()
         except Exception as error:
