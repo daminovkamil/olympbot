@@ -174,7 +174,10 @@ async def get_post(post_id: int):
     subjects: Set[int] = set()
     for subject_tag in subject_tags.find_all("span", class_="subject_tag"):
         name = md(subject_tag.text[1:])
-        subjects.add(sitedb.queries.subjects_id_by_name[name])
+        try:
+            subjects.add(sitedb.queries.subjects_id_by_name[name])
+        except Exception as error:
+            logging.error(error)
 
     # пытаемся добыть олимпиаду, которая связанна с постом
     activities: Set[int] = set()
