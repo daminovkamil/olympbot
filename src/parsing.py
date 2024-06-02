@@ -95,6 +95,7 @@ def md(html, **options):
 
 
 async def get_page(url: str):
+    global request_session
     four_days_ago = datetime.datetime.now() - datetime.timedelta(days=4)
 
     result = botdb.pages.get_page(url)
@@ -110,15 +111,20 @@ async def get_page(url: str):
     if page is not None:
         return page
 
-    page = request_session.get(url)
+    try:
+        page = request_session.get(url)
 
-    if page.ok:
-        if 'ddos' not in page.text.lower():
-            botdb.pages.add_page(url, page.text)
-            return page.text
-        else:
-            logging.info("DDoS protection detected!")
-    return None
+        if page.ok:
+            if 'ddos' not in page.text.lower():
+                botdb.pages.add_page(url, page.text)
+                return page.text
+            else:
+                logging.info("DDoS protection detected!")
+        return None
+    except Exception as error:
+        logging.error(error)
+        request_session = requests.Session()
+        return None
 
 
 @dataclass
