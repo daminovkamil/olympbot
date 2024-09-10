@@ -4,6 +4,7 @@ from aiogram import Dispatcher
 from aiogram.types import ErrorEvent
 from aiogram.types.web_app_info import WebAppInfo
 from aiogram.types import Message, CallbackQuery
+from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
@@ -25,8 +26,13 @@ import sitedb.queries
 
 import messages
 
-bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
-
+bot = Bot(
+    token=config.bot_token,
+    default=DefaultBotProperties(
+        parse_mode=ParseMode.MARKDOWN_V2,
+        link_preview_is_disabled=True
+    )
+)
 dp = Dispatcher()
 
 
