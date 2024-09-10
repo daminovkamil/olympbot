@@ -25,8 +25,6 @@ import sitedb.queries
 
 import messages
 
-from sqlalchemy import func, select
-
 bot = Bot(token=config.bot_token, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
 
 dp = Dispatcher()
@@ -56,22 +54,8 @@ async def try_delete(*args, **kwargs):
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    user_id = message.from_user.id
-
-    if sitedb.queries.touch_user(user_id):
-        await message.answer(messages.CMD_START_NEW_USER_1_MD)
-        await message.answer(messages.CMD_START_NEW_USER_2_MD)
-        await message.answer(messages.CMD_START_NEW_USER_3_MD)
-        post = await get_post_short_message(25655)
-        await message.answer(post[0], reply_markup=post[1])
-        await message.answer(messages.CMD_START_NEW_USER_4_MD)
-        await message.answer(messages.CMD_START_NEW_USER_5_MD)
-        await message.answer(messages.CMD_START_NEW_USER_6_MD)
-        await message.answer(messages.CMD_START_NEW_USER_7_MD)
-        await message.answer(messages.CMD_START_NEW_USER_8_MD)
-    else:
-        await message.answer(messages.CMD_START_OLD_USER_1_MD)
-        await message.answer(messages.CMD_START_OLD_USER_2_MD)
+    await message.answer(messages.CMD_START_1_MD)
+    await message.answer(messages.CMD_START_2_MD)
 
 
 @dp.error(F.update.message.as_("message"))

@@ -4,23 +4,8 @@ import json
 from typing import Optional
 
 prefix = "https://kdaminov.ru/olympbot"
+
 session = requests.Session()
-
-
-def user_activities(user_id: int) -> Optional[list[int]]:
-    url = f"{prefix}/user_activities/{user_id}"
-    response = session.get(url)
-    if response.status_code == 200:
-        try:
-            result = []
-            for activity_id, data in response.json().items():
-                if data['checked']:
-                    result.append(int(activity_id))
-
-            return result
-        except Exception as error:
-            logging.error(error)
-    return None
 
 
 def all_activities() -> Optional[dict]:
@@ -45,21 +30,6 @@ def all_subjects() -> Optional[dict]:
     return None
 
 
-def user_subjects(user_id: int) -> Optional[list[int]]:
-    url = f"{prefix}/user_subjects/{user_id}"
-    response = session.get(url)
-    if response.status_code == 200:
-        try:
-            result = []
-            for subject_id, data in response.json().items():
-                if data['checked']:
-                    result.append(int(subject_id))
-            return result
-        except Exception as error:
-            logging.error(error)
-    return None
-
-
 def post_filter(activities: list[int], subjects: list[int]) -> Optional[list[int]]:
     url = f"{prefix}/post_filter/?"
     for activity_id in activities:
@@ -78,16 +48,6 @@ def event_filter(activity_id: int) -> Optional[list[int]]:
     response = session.get(url)
     if response.status_code == 200:
         return response.json()
-    return None
-
-
-def touch_user(user_id: int) -> Optional[bool]:
-    url = f"{prefix}/touch_user/{user_id}"
-    response = session.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        if "created" in data:
-            return data["created"]
     return None
 
 

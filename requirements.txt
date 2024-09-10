@@ -5,7 +5,7 @@ lxml==4.9.3
 markdownify==0.11.6
 requests==2.31.0
 urllib3==1.26.16
-sqlalchemy==2.0.29
+aiohttp==3.8.5
 aiomysql==0.2.0
 greenlet==3.0.3
 python-dotenv==1.0.1

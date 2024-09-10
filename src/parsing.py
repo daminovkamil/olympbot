@@ -1,5 +1,4 @@
 """Файл отвечает за запросы к сайту"""
-import requests
 from bs4 import BeautifulSoup
 import datetime
 from aiogram.utils.formatting import Text, Bold
@@ -13,7 +12,7 @@ import botdb.events
 import sitedb.queries
 import logging
 
-request_session = requests.Session()
+import aiohttp
 
 
 class MyConverter(markdownify.MarkdownConverter):
@@ -95,7 +94,6 @@ def md(html, **options):
 
 
 async def get_page(url: str):
-    global request_session
     four_days_ago = datetime.datetime.now() - datetime.timedelta(days=4)
 
     result = botdb.pages.get_page(url)
@@ -112,18 +110,18 @@ async def get_page(url: str):
         return page
 
     try:
-        page = request_session.get(url)
-
-        if page.ok:
-            if 'ddos' not in page.text.lower():
-                botdb.pages.add_page(url, page.text)
-                return page.text
-            else:
-                logging.info("DDoS protection detected!")
-        return None
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.ok:
+                    text = await response.text()
+                    if 'ddos' not in text.lower():
+                        botdb.pages.add_page(url, text)
+                        return text
+                    else:
+                        logging.info("DDoS protection detected!")
+                return None
     except Exception as error:
         logging.error(error)
-        request_session = requests.Session()
         return None
 
 
