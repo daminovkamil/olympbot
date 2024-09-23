@@ -220,12 +220,13 @@ async def sending_events():
         try:
             if datetime.datetime.utcnow().hour < 7:
                 await asyncio.sleep(3600)
-            for event in botdb.events.current_events():
+            today = datetime.date.today()
+            for event in botdb.events.current_events(today):
+                text = await messages.event_text(event)
                 for user_id in sitedb.queries.event_filter(event.activity_id):
                     logging.info(f"Sending {event} to <User(id={user_id})>...")
-                    text = await messages.event_text(event)
                     await try_send(user_id, text=text)
-            botdb.events.delete_current()
+            botdb.events.delete_current(today)
         except Exception as error:
             ping_admin("Ошибка в sending_events()")
             ping_admin(str(error))

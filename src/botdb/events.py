@@ -3,6 +3,7 @@ import dataclasses
 from .connection import db
 import datetime
 from typing import Optional
+import logging
 from dataclasses import dataclass
 
 
@@ -87,23 +88,27 @@ def delete_event(event_id: int) -> None:
     db.commit()
 
 
-def current_events() -> list[Event]:
+def current_events(date: datetime.date) -> list[Event]:
     cursor = db.cursor()
     cursor.execute(
         "SELECT event_id FROM event_scheduler WHERE date <= ?",
-        (datetime.date.today(), ),
+        (date, ),
     )
     result = []
     for item in cursor.fetchall():
         event_id = item[0]
-        result.append(get_event(id=event_id))
+        event = get_event(id=event_id)
+        if event is None:
+            logging.error(f"Event(event_id={event_id}) is None!")
+        else:
+            result.append(event)
     return result
 
 
-def delete_current() -> None:
+def delete_current(date: datetime.date) -> None:
     cursor = db.cursor()
     cursor.execute(
         "DELETE FROM event_scheduler WHERE date <= ?",
-        (datetime.date.today(), )
+        (date, )
     )
     db.commit()
