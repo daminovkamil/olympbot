@@ -2,7 +2,7 @@ import dataclasses
 
 from .connection import db
 import datetime
-from typing import Optional
+from typing import Optional, List
 import logging
 from dataclasses import dataclass
 
@@ -61,6 +61,18 @@ def get_event(**kwargs) -> Optional[Event]:
         return Event(*result)
     else:
         return None
+
+
+def all_events() -> List[Event]:
+    cursor = db.cursor()
+
+    fields = dataclasses.fields(Event)
+    columns = ', '.join([field.name for field in fields])
+
+    cursor.execute(f"SELECT {columns} FROM events")
+    result = cursor.fetchall()
+
+    return list(map(lambda x: Event(*x), result))
 
 
 def save_event(event: Event) -> None:
