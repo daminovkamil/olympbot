@@ -260,7 +260,9 @@ async def collecting_events():
     while True:
         try:
             for activity_id in sitedb.queries.activity_data.keys():
+                logging.info(f"Updating events where activity_id={activity_id}...")
                 for event in await parsing.activity_events(activity_id=activity_id):
+                    logging.info(f"Handling event: {event}")
                     event_id = event.event_id
                     db_event = botdb.events.get_event(event_id=event_id, activity_id=activity_id)
                     if db_event is None:
@@ -269,6 +271,7 @@ async def collecting_events():
                         event_tup = (event.name, event.first_date, event.second_date)
                         db_event_tup = (db_event.name, db_event.first_date, db_event.second_date)
                         if event_tup != db_event_tup:
+                            logging.info(f"Event {event} changed. Previous is {db_event}.")
                             botdb.events.delete_event(db_event.id)
                             botdb.events.save_event(event)
                     await asyncio.sleep(1)
