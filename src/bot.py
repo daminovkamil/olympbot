@@ -271,7 +271,7 @@ async def collecting_events():
                         if event_tup != db_event_tup:
                             botdb.events.delete_event(db_event.id)
                             botdb.events.save_event(event)
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(1)
             await asyncio.sleep(3600 * 5)
         except Exception as error:
             ping_admin("Ошибка в collecting_events()")
